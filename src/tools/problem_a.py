@@ -180,6 +180,8 @@ def get_preauthorisation(
         )
 
     try:
+        get_member_by_id(member_id)
+        get_procedure_by_code(procedure_code)
         candidates = get_preauthorisation_candidates(member_id, procedure_code)
     except DataStoreError:
         return ToolResult(
@@ -483,3 +485,5 @@ def build_problem_a_registry() -> ToolRegistry:
     )
 
     return registry
+
+TOOLS = build_problem_a_registry().as_mapping()

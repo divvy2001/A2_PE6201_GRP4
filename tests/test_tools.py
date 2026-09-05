@@ -15,6 +15,8 @@ from src.tools.problem_a import (
     get_hospital_status,
     get_preauthorisation,
     lookup_policy,
+    TOOLS,
+    issue_decision_letter,
 )
 from src.tools.registry import ToolRegistry
 
@@ -153,6 +155,14 @@ class DataStoreTests(unittest.TestCase):
         self.assertIn("found", result.data)
         self.assertIn("valid", result.data)
 
+        not_found = get_preauthorisation(
+            member_id="M-9999",
+            procedure_code=procedure_code,
+            date_of_service=claim["date_of_service"],
+        )
+        self.assertFalse(not_found.ok)
+        self.assertEqual(not_found.error.code, "NOT_FOUND")
+
         invalid_date = get_preauthorisation("M-2214", procedure_code, "not-a-date")
         self.assertFalse(invalid_date.ok)
         self.assertEqual(invalid_date.error.code, "INVALID_ARGUMENT")
@@ -214,4 +224,21 @@ class DataStoreTests(unittest.TestCase):
         }
 
         self.assertEqual(set(tools), expected_names)
+        self.assertEqual(set(TOOLS), expected_names)
         self.assertTrue(registry.get_spec("issue_decision_letter").irreversible)
+
+    def test_public_tools_reject_invalid_arguments(self) -> None:
+        """Every public tool should reject clearly invalid input safely."""
+        results = [
+            get_claim(""),
+            lookup_policy(""),
+            check_coverage("", "", "not-a-list"),
+            get_preauthorisation("", "", "not-a-date"),
+            get_hospital_status(""),
+            check_duplicate_claim("", "", "", []),
+            issue_decision_letter("", None, "act"),
+        ]
+
+        for result in results:
+            self.assertFalse(result.ok)
+            self.assertEqual(result.error.code, "INVALID_ARGUMENT")
