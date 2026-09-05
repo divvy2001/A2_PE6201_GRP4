@@ -47,7 +47,13 @@ def _normalise_tool_result(value: ToolResult | dict[str, Any]) -> ToolResult:
     return ToolResult(ok=value["ok"], data=value.get("data"), error=detail)
 
 
-def _call_tool(action: Action, tools: Mapping[str, Tool], autonomy: str) -> Observation:
+def _call_tool(
+    action: Action,
+    tools: Mapping[str, Tool],
+    autonomy: str,
+    run_id: str,
+    operator_approved: bool,
+) -> Observation:
     if action.tool not in tools:
         return Observation(
             action.call_id,
@@ -62,13 +68,18 @@ def _call_tool(action: Action, tools: Mapping[str, Tool], autonomy: str) -> Obse
             False,
             error=ErrorDetail("AUTONOMY_BLOCKED", "Suggest mode cannot execute a write tool"),
         )
-    args = dict(action.args)
-    if action.tool == "issue_decision_letter":
-        args["autonomy"] = autonomy  # trusted runtime configuration overrides model text
     try:
+        args = dict(action.args)
+        if action.tool == "issue_decision_letter":
+            decision_record = args.get("decision_record")
+            if isinstance(decision_record, dict):
+                args["decision_record"] = FinalDecision.from_dict(decision_record)
+            args["autonomy"] = autonomy
+            args["run_id"] = run_id
+            args["operator_approved"] = operator_approved
         result = _normalise_tool_result(tools[action.tool](**args))
         return Observation(action.call_id, action.tool, result.ok, result.data, result.error)
-    except TypeError as error:
+    except (TypeError, SchemaValidationError) as error:
         return Observation(
             action.call_id,
             action.tool,
@@ -90,13 +101,28 @@ def _execute_actions(
     *,
     parallel: bool,
     autonomy: str,
+    run_id: str,
+    operator_approved: bool,
 ) -> list[Observation]:
     if parallel and len(actions) > 1:
         with ThreadPoolExecutor(max_workers=len(actions)) as pool:
-            futures = [pool.submit(_call_tool, action, tools, autonomy) for action in actions]
+            futures = [
+                pool.submit(
+                    _call_tool,
+                    action,
+                    tools,
+                    autonomy,
+                    run_id,
+                    operator_approved,
+                )
+                for action in actions
+            ]
             observations = [future.result() for future in futures]
     else:
-        observations = [_call_tool(action, tools, autonomy) for action in actions]
+        observations = [
+            _call_tool(action, tools, autonomy, run_id, operator_approved)
+            for action in actions
+        ]
     return sorted(observations, key=lambda item: item.call_id)
 
 
@@ -133,6 +159,7 @@ def run_agent(
     system_prompt: str = DEFAULT_SYSTEM_PROMPT,
     temperature: float = 0.0,
     guard_hooks: Any = None,
+    operator_approved: bool = False,
 ) -> RunResult:
     """Run one bounded case with the same loop for scripted and live backends."""
     if not isinstance(case_id, str) or not case_id.strip():
@@ -141,6 +168,8 @@ def run_agent(
         raise ValueError("autonomy must be suggest, confirm or act")
     if max_steps < 1 or budget_usd < 0:
         raise ValueError("max_steps must be positive and budget_usd non-negative")
+    if not isinstance(operator_approved, bool):
+        raise ValueError("operator_approved must be a trusted boolean")
 
     tools = dict(tool_registry or {})
     run_id = str(uuid.uuid4())
@@ -277,7 +306,12 @@ def run_agent(
             type(step)(step.reasoning_summary, allowed_tuple)
         )
         observations = _execute_actions(
-            allowed_tuple, tools, parallel=use_parallel, autonomy=autonomy
+            allowed_tuple,
+            tools,
+            parallel=use_parallel,
+            autonomy=autonomy,
+            run_id=run_id,
+            operator_approved=operator_approved,
         ) if allowed_tuple else []
         observations = sorted(observations + blocked_observations, key=lambda item: item.call_id)
         tool_calls += len(allowed_tuple)

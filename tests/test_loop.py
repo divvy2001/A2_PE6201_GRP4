@@ -1,9 +1,13 @@
 import json
+import tempfile
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 
 from src.agent.loop import run_agent
 from src.agent.parser import StepParseError, parse_step
 from src.schemas import ActionBlock, FinalDecision, GuardConfig, GuardDecision, ModelResponse, ToolResult
+from src.tools.problem_a import TOOLS
 
 
 class SequenceBackend:
@@ -146,6 +150,171 @@ class LoopTests(unittest.TestCase):
         self.assertEqual(result.tool_calls, 0)
         self.assertEqual(executed, [])
         self.assertEqual(result.tool_trace[0]["observation"]["error"]["code"], "TEST_GUARD")
+
+    def _run_write_tool_capture(self):
+        decision_payload = FINAL["final"]
+        backend = SequenceBackend([
+            response({
+                "type": "action_block",
+                "reasoning_summary": "Log the completed decision",
+                "actions": [{
+                    "call_id": "t01-c01",
+                    "tool": "issue_decision_letter",
+                    "args": {
+                        "case_id": "CLM-8842",
+                        "decision_record": decision_payload,
+                        "autonomy": "suggest",
+                        "run_id": "model-supplied-run-id",
+                        "operator_approved": False,
+                    },
+                }],
+            }),
+            response(FINAL),
+        ])
+        captured = {}
+
+        def capture_write(**kwargs):
+            captured.update(kwargs)
+            return ToolResult(True, {"logged": True, "log_id": "test", "gate_result": "LOGGED"})
+
+        result = run_agent(
+            "CLM-8842",
+            backend=backend,
+            model="scripted-write",
+            parallel_tools=True,
+            autonomy="confirm",
+            max_steps=3,
+            budget_usd=0.05,
+            guard_config=GuardConfig(),
+            tool_registry={"issue_decision_letter": capture_write},
+            operator_approved=True,
+        )
+        return result, captured
+
+    def test_loop_injects_trusted_run_id_into_write_tool(self):
+        """The model cannot choose or replace the run identifier."""
+        result, captured = self._run_write_tool_capture()
+
+        self.assertEqual(result.status, "completed")
+        self.assertEqual(captured["run_id"], result.run_id)
+        self.assertNotEqual(captured["run_id"], "model-supplied-run-id")
+        self.assertEqual(captured["autonomy"], "confirm")
+        self.assertTrue(captured["operator_approved"])
+
+    def test_loop_converts_write_tool_decision_dict_to_final_decision(self):
+        """Nested JSON arguments are validated before the write tool receives them."""
+        _, captured = self._run_write_tool_capture()
+
+        self.assertIsInstance(captured["decision_record"], FinalDecision)
+        self.assertEqual(captured["decision_record"].decision, "approve_in_principle")
+
+    def test_real_problem_a_registry_connects_to_loop(self):
+        """The shared loop can execute Xiaohua's exported get_claim tool."""
+        backend = SequenceBackend([
+            response({
+                "type": "action_block",
+                "reasoning_summary": "Read the real claim fixture",
+                "actions": [{
+                    "call_id": "t01-c01",
+                    "tool": "get_claim",
+                    "args": {"case_id": "CLM-8842"},
+                }],
+            }),
+            response(FINAL),
+        ])
+        result = run_agent(
+            "CLM-8842",
+            backend=backend,
+            model="scripted-real-tools",
+            parallel_tools=True,
+            autonomy="confirm",
+            max_steps=3,
+            budget_usd=0.05,
+            guard_config=GuardConfig(),
+            tool_registry=TOOLS,
+        )
+
+        observation = result.tool_trace[0]["observation"]
+        self.assertEqual(result.status, "completed")
+        self.assertTrue(observation["ok"])
+        self.assertEqual(observation["data"]["claim_id"], "CLM-8842")
+
+    def test_real_write_tool_is_fail_closed_in_unapproved_confirm_mode(self):
+        """The integrated loop/tool path must return a gate result without writing."""
+        backend = SequenceBackend([
+            response({
+                "type": "action_block",
+                "reasoning_summary": "Attempt the gated local write",
+                "actions": [{
+                    "call_id": "t01-c01",
+                    "tool": "issue_decision_letter",
+                    "args": {
+                        "case_id": "CLM-8842",
+                        "decision_record": FINAL["final"],
+                        "operator_approved": True,
+                    },
+                }],
+            }),
+            response(FINAL),
+        ])
+        result = run_agent(
+            "CLM-8842",
+            backend=backend,
+            model="scripted-real-write",
+            parallel_tools=True,
+            autonomy="confirm",
+            max_steps=3,
+            budget_usd=0.05,
+            guard_config=GuardConfig(),
+            tool_registry=TOOLS,
+            operator_approved=False,
+        )
+
+        observation = result.tool_trace[0]["observation"]
+        self.assertTrue(observation["ok"])
+        self.assertFalse(observation["data"]["logged"])
+        self.assertEqual(observation["data"]["gate_result"], "CONFIRMATION_REQUIRED")
+
+    def test_real_write_tool_logs_loop_run_id_in_act_mode(self):
+        """The complete write path records the loop's trusted run ID in isolated JSONL."""
+        backend = SequenceBackend([
+            response({
+                "type": "action_block",
+                "reasoning_summary": "Write the completed decision",
+                "actions": [{
+                    "call_id": "t01-c01",
+                    "tool": "issue_decision_letter",
+                    "args": {
+                        "case_id": "CLM-8842",
+                        "decision_record": FINAL["final"],
+                        "run_id": "untrusted-model-value",
+                    },
+                }],
+            }),
+            response(FINAL),
+        ])
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            log_path = Path(temp_dir) / "decision_log.jsonl"
+            with patch("src.tools.problem_a.DECISION_LOG_PATH", log_path):
+                result = run_agent(
+                    "CLM-8842",
+                    backend=backend,
+                    model="scripted-real-write",
+                    parallel_tools=True,
+                    autonomy="act",
+                    max_steps=3,
+                    budget_usd=0.05,
+                    guard_config=GuardConfig(),
+                    tool_registry=TOOLS,
+                )
+
+            record = json.loads(log_path.read_text(encoding="utf-8").strip())
+
+        self.assertEqual(result.status, "completed")
+        self.assertEqual(record["run_id"], result.run_id)
+        self.assertNotEqual(record["run_id"], "untrusted-model-value")
+        self.assertEqual(record["autonomy"], "act")
 
 
 if __name__ == "__main__":

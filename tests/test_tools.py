@@ -1,6 +1,6 @@
 import unittest
 
-from src.schemas import ToolResult
+from src.schemas import FinalDecision, ToolResult
 from src.tools.base import ToolSpec
 from src.tools.data_store import (
     DataStoreError,
@@ -141,6 +141,13 @@ class DataStoreTests(unittest.TestCase):
         self.assertFalse(failure.ok)
         self.assertEqual(failure.error.code, "NOT_FOUND")
 
+    def test_check_coverage_reads_true_preauthorisation_flag(self) -> None:
+        """Procedure 62480 is explicitly marked as requiring pre-authorisation."""
+        result = check_coverage("M-2214", "62480", [])
+
+        self.assertTrue(result.ok)
+        self.assertTrue(result.data["requires_preauth"])
+
     def test_get_preauthorisation_returns_query_evidence(self) -> None:
         """Pre-authorisation queries return evidence without crashing the run."""
         claim = get_claim("CLM-8842").data
@@ -242,3 +249,52 @@ class DataStoreTests(unittest.TestCase):
         for result in results:
             self.assertFalse(result.ok)
             self.assertEqual(result.error.code, "INVALID_ARGUMENT")
+
+    def test_confirm_mode_requires_trusted_operator_approval(self) -> None:
+        """Confirm mode must fail closed before the local JSONL write."""
+        decision = FinalDecision.from_dict({
+            "decision": "approve_in_principle",
+            "trigger": None,
+            "missing": None,
+            "escalate_to": None,
+            "line_dispositions": [],
+            "approved_total": 0,
+            "refused_total": 0,
+            "evidence": ["CLM-8842"],
+        })
+
+        result = issue_decision_letter(
+            "CLM-8842",
+            decision,
+            "confirm",
+            run_id="test-run",
+            operator_approved=False,
+        )
+
+        self.assertTrue(result.ok)
+        self.assertFalse(result.data["logged"])
+        self.assertEqual(result.data["gate_result"], "CONFIRMATION_REQUIRED")
+
+    def test_issue_decision_letter_rejects_unknown_autonomy(self) -> None:
+        """Unexpected autonomy text must never reach the write path."""
+        decision = FinalDecision.from_dict({
+            "decision": "approve_in_principle",
+            "trigger": None,
+            "missing": None,
+            "escalate_to": None,
+            "line_dispositions": [],
+            "approved_total": 0,
+            "refused_total": 0,
+            "evidence": ["CLM-8842"],
+        })
+
+        result = issue_decision_letter(
+            "CLM-8842",
+            decision,
+            "unknown",
+            run_id="test-run",
+            operator_approved=True,
+        )
+
+        self.assertFalse(result.ok)
+        self.assertEqual(result.error.code, "INVALID_ARGUMENT")

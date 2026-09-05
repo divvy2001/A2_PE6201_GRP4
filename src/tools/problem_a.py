@@ -25,6 +25,9 @@ from src.tools.data_store import (
 )
 
 
+DECISION_LOG_PATH = Path(__file__).resolve().parents[2] / "outputs" / "decision_log.jsonl"
+
+
 def get_claim(case_id: str) -> ToolResult:
     """Return the claim facts for one claim ID."""
     if not isinstance(case_id, str) or not case_id.strip():
@@ -130,7 +133,7 @@ def check_coverage(
         None,
     )
     excluded = exclusion is not None
-    requires_preauth = bool(procedure.get("requires_preauthorisation", False))
+    requires_preauth = bool(procedure.get("requires_preauth", False))
     document_present = (
         required_document is None or required_document in attached_documents
     )
@@ -319,6 +322,7 @@ def issue_decision_letter(
     autonomy: str,
     *,
     run_id: str | None = None,
+    operator_approved: bool = False,
 ) -> ToolResult:
     """Write one gated local decision record for the demonstration only."""
     if not isinstance(case_id, str) or not case_id.strip():
@@ -339,6 +343,24 @@ def issue_decision_letter(
             ),
         )
 
+    if autonomy not in {"suggest", "confirm", "act"}:
+        return ToolResult(
+            ok=False,
+            error=ErrorDetail(
+                code="INVALID_ARGUMENT",
+                message="autonomy must be suggest, confirm, or act",
+            ),
+        )
+
+    if not isinstance(operator_approved, bool):
+        return ToolResult(
+            ok=False,
+            error=ErrorDetail(
+                code="INVALID_ARGUMENT",
+                message="operator_approved must be a trusted boolean",
+            ),
+        )
+
     if autonomy == "suggest":
         return ToolResult(
             ok=True,
@@ -346,6 +368,16 @@ def issue_decision_letter(
                 "logged": False,
                 "log_id": None,
                 "gate_result": "AUTONOMY_BLOCKED",
+            },
+        )
+
+    if autonomy == "confirm" and not operator_approved:
+        return ToolResult(
+            ok=True,
+            data={
+                "logged": False,
+                "log_id": None,
+                "gate_result": "CONFIRMATION_REQUIRED",
             },
         )
 
@@ -370,7 +402,7 @@ def issue_decision_letter(
         )
 
     log_id = f"DEC-{case_id}-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
-    log_path = Path(__file__).resolve().parents[2] / "outputs" / "decision_log.jsonl"
+    log_path = DECISION_LOG_PATH
     log_path.parent.mkdir(parents=True, exist_ok=True)
 
     record = {
