@@ -1,5 +1,32 @@
 **Status:** Draft - to be aligned with `schemas.py`
 
+## Shared ToolResult format
+
+### Success
+
+~~~json
+{
+  "ok": true,
+  "data": {},
+  "error": null
+}
+~~~
+
+### Failure
+
+~~~json
+{
+  "ok": false,
+  "data": null,
+  "error": {
+    "code": "CLAIM_NOT_FOUND",
+    "message": "No claim found for CLM-9999"
+  }
+}
+~~~
+
+### Seven tool contracts
+
 get_claim(case_id: str) -> ToolResult[data={
   claim_id, member_id, hospital_id, date_of_service,
   narrative, documents: list[str],
