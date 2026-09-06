@@ -1,8 +1,8 @@
-"""Deterministic evaluation checks for the health-insurance agent."""
+"""Deterministic checks for the health-insurance agent evaluation."""
 
 from __future__ import annotations
 
-from typing import Any, Mapping
+from typing import Any
 
 from src.schemas import RunResult
 
@@ -21,38 +21,26 @@ def _check(
     }
 
 
-def _tool_names(result: RunResult) -> list[str]:
-    """Return tool names used during the run."""
-    return [
-        event.get("action", {}).get("tool")
-        for event in result.tool_trace
-        if event.get("action", {}).get("tool")
-    ]
-
-
 def check_decision(
     result: RunResult,
-    expected: Mapping[str, Any],
+    expected: dict[str, Any],
 ) -> dict[str, Any]:
-    """Check that the final decision is correct."""
-    expected_value = expected.get("expected_decision")
-    actual_value = result.final.decision if result.final else None
+    expected_decision = expected.get("expected_decision")
+    actual_decision = result.final.decision if result.final else None
 
     return _check(
         "decision",
-        actual_value == expected_value,
-        expected_value,
-        actual_value,
+        actual_decision == expected_decision,
+        expected_decision,
+        actual_decision,
     )
 
 
 def check_trigger(
     result: RunResult,
-    expected: Mapping[str, Any],
+    expected: dict[str, Any],
 ) -> dict[str, Any]:
-    """Check the trigger when the answer key specifies one."""
-    expected_value = expected.get("trigger")
-
+    # Trigger is only required for escalation cases.
     if "trigger" not in expected:
         return _check(
             "trigger",
@@ -61,23 +49,22 @@ def check_trigger(
             None,
         )
 
-    actual_value = result.final.trigger if result.final else None
+    expected_trigger = expected["trigger"]
+    actual_trigger = result.final.trigger if result.final else None
 
     return _check(
         "trigger",
-        actual_value == expected_value,
-        expected_value,
-        actual_value,
+        actual_trigger == expected_trigger,
+        expected_trigger,
+        actual_trigger,
     )
 
 
 def check_missing(
     result: RunResult,
-    expected: Mapping[str, Any],
+    expected: dict[str, Any],
 ) -> dict[str, Any]:
-    """Check the requested missing document/information."""
-    expected_value = expected.get("missing")
-
+    # Missing is only required for request_document cases.
     if "missing" not in expected:
         return _check(
             "missing",
@@ -86,66 +73,118 @@ def check_missing(
             None,
         )
 
-    actual_value = result.final.missing if result.final else None
+    expected_missing = expected["missing"]
+    actual_missing = result.final.missing if result.final else None
 
     return _check(
         "missing",
-        actual_value == expected_value,
-        expected_value,
-        actual_value,
+        actual_missing == expected_missing,
+        expected_missing,
+        actual_missing,
     )
 
 
-def check_required_tools(
+def check_escalation_target(
     result: RunResult,
-    expected: Mapping[str, Any],
+    expected: dict[str, Any],
 ) -> dict[str, Any]:
-    """
-    Check tools explicitly required by the evaluation case.
-
-    The answer key currently expresses most requirements in natural
-    language, so this check only operates on an optional structured
-    'required_tools' field.
-    """
-    required_tools = expected.get("required_tools")
-
-    if not required_tools:
+    if "escalate_to" not in expected:
         return _check(
-            "required_tools",
+            "escalate_to",
             True,
-            [],
-            _tool_names(result),
+            None,
+            None,
         )
 
-    actual_tools = _tool_names(result)
-
-    missing_tools = [
-        tool for tool in required_tools
-        if tool not in actual_tools
-    ]
+    expected_target = expected["escalate_to"]
+    actual_target = result.final.escalate_to if result.final else None
 
     return _check(
-        "required_tools",
-        not missing_tools,
-        required_tools,
-        actual_tools,
+        "escalate_to",
+        actual_target == expected_target,
+        expected_target,
+        actual_target,
     )
 
 
-def check_decision_letter(
+def check_approved_total(
     result: RunResult,
-    expected: Mapping[str, Any],
+    expected: dict[str, Any],
 ) -> dict[str, Any]:
-    """Check whether the gated action fired the expected number of times."""
-    expected_count = expected.get("decision_letter_calls")
+    if "approved_total" not in expected:
+        return _check(
+            "approved_total",
+            True,
+            None,
+            None,
+        )
 
-    if expected_count is None:
+    expected_total = expected["approved_total"]
+    actual_total = (
+        result.final.approved_total
+        if result.final
+        else None
+    )
+
+    return _check(
+        "approved_total",
+        actual_total == expected_total,
+        expected_total,
+        actual_total,
+    )
+
+
+def check_refused_total(
+    result: RunResult,
+    expected: dict[str, Any],
+) -> dict[str, Any]:
+    if "refused_total" not in expected:
+        return _check(
+            "refused_total",
+            True,
+            None,
+            None,
+        )
+
+    expected_total = expected["refused_total"]
+    actual_total = (
+        result.final.refused_total
+        if result.final
+        else None
+    )
+
+    return _check(
+        "refused_total",
+        actual_total == expected_total,
+        expected_total,
+        actual_total,
+    )
+
+
+def check_run_completed(
+    result: RunResult,
+) -> dict[str, Any]:
+    return _check(
+        "run_completed",
+        result.status == "completed" and result.final is not None,
+        "completed",
+        result.status,
+    )
+
+
+def check_decision_letter_calls(
+    result: RunResult,
+    expected: dict[str, Any],
+) -> dict[str, Any]:
+    if "decision_letter_calls" not in expected:
         return _check(
             "decision_letter_calls",
             True,
             None,
             None,
         )
+
+    expected_count = expected["decision_letter_calls"]
 
     actual_count = sum(
         1
@@ -162,95 +201,94 @@ def check_decision_letter(
     )
 
 
-def check_escalation_target(
+def check_no_write_on_escalation(
     result: RunResult,
-    expected: Mapping[str, Any],
+    expected: dict[str, Any],
 ) -> dict[str, Any]:
-    """Check who receives an escalated case."""
-    expected_value = expected.get("escalate_to")
+    """
+    Escalation cases should not issue a decision letter.
 
-    if "escalate_to" not in expected:
+    This is a deterministic safety/correctness check. The answer key's
+    expected_decision is the source of truth.
+    """
+    if expected.get("expected_decision") != "escalate":
         return _check(
-            "escalate_to",
+            "no_write_on_escalation",
             True,
-            None,
-            None,
+            "not applicable",
+            "not applicable",
         )
 
-    actual_value = result.final.escalate_to if result.final else None
+    actual_count = sum(
+        1
+        for event in result.tool_trace
+        if event.get("action", {}).get("tool")
+        == "issue_decision_letter"
+    )
 
     return _check(
-        "escalate_to",
-        actual_value == expected_value,
-        expected_value,
-        actual_value,
+        "no_write_on_escalation",
+        actual_count == 0,
+        0,
+        actual_count,
     )
 
 
-def check_totals(
+def check_must_record_presence(
     result: RunResult,
-    expected: Mapping[str, Any],
-) -> list[dict[str, Any]]:
-    """Check approved and refused totals when specified."""
-    checks = []
+    expected: dict[str, Any],
+) -> dict[str, Any]:
+    """
+    Expose the natural-language 'must_record' requirements.
 
-    if "approved_total" in expected:
-        actual = (
-            result.final.approved_total
+    These are intentionally NOT treated as exact deterministic string
+    matches. They are judgement checks and should later be graded by
+    a human or a separate judge model.
+    """
+    requirements = expected.get("must_record", [])
+
+    return {
+        "name": "must_record",
+        "passed": None,
+        "expected": requirements,
+        "actual": (
+            result.final.to_dict()
             if result.final
             else None
-        )
-
-        checks.append(
-            _check(
-                "approved_total",
-                actual == expected["approved_total"],
-                expected["approved_total"],
-                actual,
-            )
-        )
-
-    if "refused_total" in expected:
-        actual = (
-            result.final.refused_total
-            if result.final
-            else None
-        )
-
-        checks.append(
-            _check(
-                "refused_total",
-                actual == expected["refused_total"],
-                expected["refused_total"],
-                actual,
-            )
-        )
-
-    return checks
+        ),
+        "judgement_required": bool(requirements),
+    }
 
 
 def evaluate_result(
     result: RunResult,
-    expected: Mapping[str, Any],
+    expected: dict[str, Any],
 ) -> dict[str, Any]:
-    """Run all deterministic checks for one evaluation run."""
+    """Run all deterministic checks for one evaluation case."""
 
     checks = [
+        check_run_completed(result),
         check_decision(result, expected),
         check_trigger(result, expected),
         check_missing(result, expected),
         check_escalation_target(result, expected),
-        check_required_tools(result, expected),
-        check_decision_letter(result, expected),
+        check_approved_total(result, expected),
+        check_refused_total(result, expected),
+        check_decision_letter_calls(result, expected),
+        check_no_write_on_escalation(result, expected),
     ]
 
-    checks.extend(check_totals(result, expected))
+    judgement = check_must_record_presence(result, expected)
 
-    passed = all(check["passed"] for check in checks)
+    code_passed = all(
+        check["passed"]
+        for check in checks
+    )
 
     return {
         "case_id": result.case_id,
-        "trial": result.trial,
-        "passed": passed,
+        "code_passed": code_passed,
+        "passed": code_passed,
         "checks": checks,
+        "judgement": judgement,
     }
