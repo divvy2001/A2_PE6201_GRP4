@@ -9,7 +9,7 @@ from src.agent.prompt_loader import load_prompt
 from src.backends.base import ModelBackend
 from src.schemas import GuardConfig, RunResult
 
-from evaluation.checks import evaluate_result
+from Evals.checks import evaluate_result
 
 
 def run_case(
