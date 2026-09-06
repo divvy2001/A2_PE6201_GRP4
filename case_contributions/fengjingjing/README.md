@@ -45,3 +45,27 @@ python -m unittest tests.test_guards -v # unit tests for src/guards/policy.py
   consults `GuardConfig.autonomy_enabled` — so that particular cap cannot
   be toggled off at the loop level; only the domain-level defence-in-depth
   check in `GuardHooks.autonomy_guard_enabled` can be.
+
+
+
+## Claim evaluation cases
+
+This folder also contains the five Problem A evaluation cases assigned to
+FENG JINGJING (`CLM-9031`–`CLM-9035`).
+
+### Files
+
+- `cases.py` — five additional claim fixtures using the shared `EXTRA_*`
+  contribution format.
+- `labels.json` — expected decisions, triggers/missing information,
+  families, must-record evidence, and notes for the five cases.
+
+### Assigned claim cases
+
+| Case ID | Family | Expected decision | What it tests |
+|---|---|---|---|
+| CLM-9031 | ordinary | `approve_in_principle` | Ordinary covered single-line claim with no escalation or missing-information condition. |
+| CLM-9032 | four_line_long_run | `approve_in_principle` | Four covered lines exercise a longer tool-use path while remaining fully decidable. |
+| CLM-9033 | missing_preauthorisation | `request_document` | Procedure `62480` requires preauthorisation, but no matching preauthorisation exists for the member and procedure. |
+| CLM-9034 | duplicate_near_miss | `approve_in_principle` | Member, hospital and complete line match prior claim `CLM-8710`, but the service date differs, so it is not a duplicate. |
+| CLM-9035 | outside_policy_date | `escalate` | Service date `2026-05-25` is before `POL-6001` starts on `2026-06-01`, triggering `outside_policy_dates`. |
