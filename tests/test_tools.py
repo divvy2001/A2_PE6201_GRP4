@@ -298,3 +298,147 @@ class DataStoreTests(unittest.TestCase):
 
         self.assertFalse(result.ok)
         self.assertEqual(result.error.code, "INVALID_ARGUMENT")
+
+    def test_get_claim_response_has_documented_shape(self) -> None:
+        """get_claim exposes only its documented claim fields."""
+        result = get_claim("CLM-8842")
+
+        self.assertTrue(result.ok)
+        self.assertEqual(
+            set(result.data),
+            {
+                "claim_id",
+                "member_id",
+                "hospital_id",
+                "date_of_service",
+                "narrative",
+                "documents",
+                "lines",
+            },
+        )
+
+    def test_lookup_policy_response_has_documented_shape(self) -> None:
+        """lookup_policy exposes only its documented policy fields."""
+        result = lookup_policy("M-2214")
+
+        self.assertTrue(result.ok)
+        self.assertEqual(
+            set(result.data),
+            {
+                "member_id",
+                "policy_id",
+                "product",
+                "status",
+                "start_date",
+                "end_date",
+                "annual_limit",
+                "used_to_date",
+                "remaining_limit",
+                "exclusions",
+            },
+        )
+
+    def test_check_coverage_response_has_documented_shape(self) -> None:
+        """check_coverage exposes one fixed-shape coverage result."""
+        claim = get_claim("CLM-8842").data
+        procedure_code = claim["lines"][0]["code"]
+
+        result = check_coverage(
+            "M-2214",
+            procedure_code,
+            claim["documents"],
+        )
+
+        self.assertTrue(result.ok)
+        self.assertEqual(
+            set(result.data),
+            {
+                "procedure_code",
+                "description",
+                "excluded",
+                "exclusion_rule",
+                "requires_preauth",
+                "required_document",
+                "document_present",
+            },
+        )
+
+    def test_get_preauthorisation_response_has_documented_shape(self) -> None:
+        """get_preauthorisation exposes one fixed-shape evidence result."""
+        claim = get_claim("CLM-8842").data
+        procedure_code = claim["lines"][0]["code"]
+
+        result = get_preauthorisation(
+            "M-2214",
+            procedure_code,
+            claim["date_of_service"],
+        )
+
+        self.assertTrue(result.ok)
+        self.assertEqual(
+            set(result.data),
+            {
+                "found",
+                "preauth_id",
+                "valid",
+                "valid_from",
+                "valid_to",
+            },
+        )
+
+    def test_get_hospital_status_response_has_documented_shape(self) -> None:
+        """get_hospital_status exposes only documented hospital fields."""
+        claim = get_claim("CLM-8842").data
+        result = get_hospital_status(claim["hospital_id"])
+
+        self.assertTrue(result.ok)
+        self.assertEqual(
+            set(result.data),
+            {"hospital_id", "name", "panel", "country"},
+        )
+
+    def test_check_duplicate_claim_response_has_documented_shape(self) -> None:
+        """check_duplicate_claim exposes one fixed-shape duplicate result."""
+        claim = get_claim("CLM-8933").data
+
+        result = check_duplicate_claim(
+            claim["member_id"],
+            claim["hospital_id"],
+            claim["date_of_service"],
+            claim["lines"],
+        )
+
+        self.assertTrue(result.ok)
+        self.assertEqual(
+            set(result.data),
+            {"duplicate", "prior_claim_id", "matched_fields"},
+        )
+
+    def test_issue_decision_letter_response_has_documented_shape(self) -> None:
+        """The gated write tool exposes a fixed-shape blocked result."""
+        decision = FinalDecision.from_dict(
+            {
+                "decision": "approve_in_principle",
+                "trigger": None,
+                "missing": None,
+                "escalate_to": None,
+                "line_dispositions": [],
+                "approved_total": 0,
+                "refused_total": 0,
+                "evidence": [],
+            }
+        )
+
+        result = issue_decision_letter(
+            case_id="CLM-8842",
+            decision_record=decision,
+            autonomy="suggest",
+            run_id="shape-test",
+            operator_approved=False,
+        )
+
+        self.assertTrue(result.ok)
+        self.assertEqual(
+            set(result.data),
+            {"logged", "log_id", "gate_result"},
+        )
