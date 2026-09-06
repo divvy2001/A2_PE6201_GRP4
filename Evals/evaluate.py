@@ -1,21 +1,49 @@
-"""Run the health-insurance evaluation set through the agent."""
+"""
+Evaluation runner.
+
+Pipeline:
+
+    answer key
+        ↓
+    run_agent()
+        ↓
+    L1 deterministic checks
+        +
+    L2 must_record judgement
+        ↓
+    final PASS / FAIL
+"""
 
 from __future__ import annotations
 
+import argparse
 import json
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
+
+from Evals.checks import evaluate_result
+from Evals.judgement import judge_must_record
 
 from src.agent.loop import run_agent
 from src.agent.prompt_loader import load_prompt
 from src.backends.base import ModelBackend
-from src.schemas import GuardConfig, RunResult
-
-from evaluation.checks import evaluate_result
+from src.schemas import GuardConfig
 
 
-# These are the negative families in the supplied starter evaluation set.
-# They receive 3 trials according to the assignment.
+# ---------------------------------------------------------
+# Configuration
+# ---------------------------------------------------------
+
+DEFAULT_ANSWER_KEY = (
+    Path(__file__).resolve().parent.parent
+    / "reference_data"
+    / "expected_outcomes_A.json"
+)
+
+# Families that receive 3 trials.
+#
+# These are the negative cases where the agent must correctly
+# refuse to act / escalate rather than proceed.
 NEGATIVE_FAMILIES = {
     "preauth_absent",
     "preauth_expired",
@@ -28,198 +56,583 @@ NEGATIVE_FAMILIES = {
 }
 
 
-def load_evaluation_cases(
-    path: str | Path,
+# ---------------------------------------------------------
+# Answer-key loading
+# ---------------------------------------------------------
+
+def load_answer_key(
+    path: str | Path = DEFAULT_ANSWER_KEY,
 ) -> list[dict[str, Any]]:
-    """Load the labelled evaluation answer key."""
+    """
+    Load and validate the labelled evaluation cases.
+
+    The answer key uses fields such as:
+
+        case_id
+        expected_decision
+        trigger
+        missing
+        family
+        must_record
+
+    The runner converts this directly into the case structure
+    required by the evaluation loop.
+    """
 
     path = Path(path)
 
-    with path.open("r", encoding="utf-8") as file:
-        cases = json.load(file)
-
-    if not isinstance(cases, list):
-        raise ValueError(
-            "Evaluation answer key must contain a JSON list."
+    if not path.exists():
+        raise FileNotFoundError(
+            f"Answer key not found: {path}"
         )
 
-    for case in cases:
-        if not isinstance(case, dict):
+    with path.open("r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    if not isinstance(data, list):
+        raise ValueError(
+            "Answer key must contain a JSON list."
+        )
+
+    cases: list[dict[str, Any]] = []
+
+    for index, item in enumerate(data, start=1):
+
+        if not isinstance(item, dict):
             raise ValueError(
-                "Each evaluation case must be a JSON object."
+                f"Answer-key entry {index} must be an object."
             )
 
-        if "case_id" not in case:
+        case_id = item.get("case_id")
+
+        if not isinstance(case_id, str) or not case_id.strip():
             raise ValueError(
-                "Evaluation case is missing 'case_id'."
+                f"Answer-key entry {index} has invalid case_id."
             )
 
-        if "expected_decision" not in case:
+        if "expected_decision" not in item:
             raise ValueError(
-                f"{case['case_id']} is missing "
-                "'expected_decision'."
+                f"{case_id}: missing expected_decision."
             )
+
+        family = item.get("family", "")
+
+        # Create the runner's normalized representation.
+        case = {
+            "case_id": case_id,
+            "expected": item,
+            "negative": family in NEGATIVE_FAMILIES,
+            "family": family,
+        }
+
+        cases.append(case)
 
     return cases
 
 
-def is_negative_case(
-    case: Mapping[str, Any],
-) -> bool:
-    """Return whether this case receives three trials."""
+# ---------------------------------------------------------
+# Trial count
+# ---------------------------------------------------------
 
-    return case.get("family") in NEGATIVE_FAMILIES
+def trial_count(case: dict[str, Any]) -> int:
+    """
+    Return the number of trials required for a case.
 
+    Ordinary case -> 1
+    Negative case -> 3
+    """
+
+    return 3 if case.get("negative", False) else 1
+
+
+# ---------------------------------------------------------
+# Single case
+# ---------------------------------------------------------
 
 def run_case(
-    case: Mapping[str, Any],
+    case: dict[str, Any],
     *,
     backend: ModelBackend,
     model: str,
-    parallel_tools: bool,
-    autonomy: str,
-    max_steps: int,
-    budget_usd: float,
-    guard_config: GuardConfig,
-    tool_registry: Mapping[str, Any],
+    judge_backend: ModelBackend | None = None,
+    judge_model: str | None = None,
+    parallel_tools: bool = True,
+    autonomy: str = "confirm",
+    max_steps: int = 8,
+    budget_usd: float = 1.0,
+    guard_config: GuardConfig | None = None,
+    tool_registry: dict[str, Any] | None = None,
     prompt_version: str = "v2",
-    trial: int = 1,
-    temperature: float = 0.0,
-    guard_hooks: Any = None,
+    system_prompt: str | None = None,
 ) -> dict[str, Any]:
-    """Run and grade one case/trial."""
+    """
+    Run all trials for one evaluation case.
+
+    Each trial runs the actual agent and then applies:
+
+        L1 deterministic checks
+        L2 must_record judgement
+
+    The LLM judge is optional for development, but should be
+    supplied for the actual D4 evaluation.
+    """
 
     case_id = case["case_id"]
+    expected = case["expected"]
 
-    # The evaluator knows the case ID and expected outcome.
-    # The agent obtains the actual claim/world data through its tools.
-    system_prompt = load_prompt(prompt_version)
+    number_of_trials = trial_count(case)
 
-    result: RunResult = run_agent(
-        case_id=case_id,
-        backend=backend,
-        model=model,
-        parallel_tools=parallel_tools,
-        autonomy=autonomy,
-        max_steps=max_steps,
-        budget_usd=budget_usd,
-        guard_config=guard_config,
-        tool_registry=tool_registry,
-        prompt_version=prompt_version,
-        trial=trial,
-        system_prompt=system_prompt,
-        temperature=temperature,
-        guard_hooks=guard_hooks,
+    prompt = (
+        system_prompt
+        if system_prompt is not None
+        else load_prompt(prompt_version)
     )
 
-    evaluation = evaluate_result(
-        result,
-        dict(case),
-    )
+    if guard_config is None:
+        guard_config = GuardConfig()
 
-    return {
-        "run": result.to_dict(),
-        "evaluation": evaluation,
-    }
+    trials: list[dict[str, Any]] = []
 
+    for trial in range(1, number_of_trials + 1):
 
-def run_evaluation(
-    cases: list[Mapping[str, Any]],
-    *,
-    backend: ModelBackend,
-    model: str,
-    parallel_tools: bool,
-    autonomy: str,
-    max_steps: int,
-    budget_usd: float,
-    guard_config: GuardConfig,
-    tool_registry: Mapping[str, Any],
-    prompt_version: str = "v2",
-    temperature: float = 0.0,
-    guard_hooks: Any = None,
-) -> list[dict[str, Any]]:
-    """
-    Run the complete evaluation set.
-
-    Ordinary cases: 1 trial.
-    Negative cases: 3 trials.
-    """
-
-    results: list[dict[str, Any]] = []
-
-    for case in cases:
-        trial_count = (
-            3
-            if is_negative_case(case)
-            else 1
+        result = run_agent(
+            case_id,
+            backend=backend,
+            model=model,
+            parallel_tools=parallel_tools,
+            autonomy=autonomy,
+            max_steps=max_steps,
+            budget_usd=budget_usd,
+            guard_config=guard_config,
+            tool_registry=tool_registry,
+            prompt_version=prompt_version,
+            trial=trial,
+            system_prompt=prompt,
+            temperature=0.0,
         )
 
-        for trial in range(1, trial_count + 1):
-            results.append(
-                run_case(
-                    case,
-                    backend=backend,
-                    model=model,
-                    parallel_tools=parallel_tools,
-                    autonomy=autonomy,
-                    max_steps=max_steps,
-                    budget_usd=budget_usd,
-                    guard_config=guard_config,
-                    tool_registry=tool_registry,
-                    prompt_version=prompt_version,
-                    trial=trial,
-                    temperature=temperature,
-                    guard_hooks=guard_hooks,
-                )
+        # -------------------------------------------------
+        # L1 deterministic checks
+        # -------------------------------------------------
+
+        l1 = evaluate_result(
+            result,
+            expected,
+        )
+
+        # -------------------------------------------------
+        # L2 judgement checks
+        # -------------------------------------------------
+
+        if expected.get("must_record"):
+
+            if judge_backend is not None and judge_model is not None:
+
+                if result.final is None:
+
+                    l2 = {
+                        "status": "not_run",
+                        "passed": False,
+                        "checks": [],
+                        "error": (
+                            "Cannot perform must_record judgement "
+                            "because the agent produced no final decision."
+                        ),
+                        "judge_model": judge_model,
+                    }
+
+                else:
+
+                    l2 = judge_must_record(
+                        case_id=case_id,
+                        requirements=expected["must_record"],
+                        final_decision=result.final,
+                        backend=judge_backend,
+                        model=judge_model,
+                    )
+
+            else:
+
+                l2 = {
+                    "status": "not_run",
+                    "passed": None,
+                    "checks": [],
+                    "judge_model": None,
+                    "error": "No judge backend/model configured.",
+                }
+
+        else:
+
+            l2 = {
+                "status": "not_required",
+                "passed": True,
+                "checks": [],
+                "judge_model": judge_model,
+            }
+
+        # -------------------------------------------------
+        # Overall result
+        # -------------------------------------------------
+
+        if l2["status"] == "not_run":
+
+            # During development we retain the L1 result,
+            # but explicitly mark that the full evaluation
+            # was not performed.
+            overall_passed = l1["passed"]
+            evaluation_complete = False
+
+        else:
+
+            overall_passed = (
+                l1["passed"]
+                and l2["passed"]
             )
+            evaluation_complete = True
 
-    return results
+        trials.append(
+            {
+                "trial": trial,
+                "passed": overall_passed,
+                "evaluation_complete": evaluation_complete,
 
+                # Keep both layers visible.
+                "code_passed": l1["passed"],
+                "judgement_passed": l2["passed"],
 
-def summarise_results(
-    results: list[dict[str, Any]],
-) -> dict[str, Any]:
-    """Create a small summary for reporting."""
+                "l1": l1,
+                "l2": l2,
 
-    total_runs = len(results)
+                # Run-level cost metrics needed by D5/D6.
+                "status": result.status,
+                "run_id": result.run_id,
+                "tokens_in": result.tokens_in,
+                "tokens_out": result.tokens_out,
+                "cost_usd": result.cost_usd,
+                "latency_ms": result.latency_ms,
+                "turns": result.turns,
+                "tool_calls": result.tool_calls,
+                "caps_fired": result.caps_fired,
+            }
+        )
 
-    code_passes = sum(
-        1
-        for result in results
-        if result["evaluation"]["code_passed"]
+    # ---------------------------------------------------------
+    # Case-level aggregation
+    # ---------------------------------------------------------
+
+    passed_trials = sum(
+        1 for trial in trials
+        if trial["passed"]
     )
 
-    completed_runs = sum(
-        1
-        for result in results
-        if result["run"]["status"] == "completed"
+    total_trials = len(trials)
+
+    complete_trials = sum(
+        1 for trial in trials
+        if trial["evaluation_complete"]
     )
 
     total_tokens_in = sum(
-        result["run"].get("tokens_in", 0)
-        for result in results
+        trial["tokens_in"]
+        for trial in trials
     )
 
     total_tokens_out = sum(
-        result["run"].get("tokens_out", 0)
-        for result in results
+        trial["tokens_out"]
+        for trial in trials
     )
 
     total_cost = sum(
-        result["run"].get("cost_usd", 0.0)
-        for result in results
+        trial["cost_usd"]
+        for trial in trials
+    )
+
+    total_latency = sum(
+        trial["latency_ms"]
+        for trial in trials
     )
 
     return {
-        "total_runs": total_runs,
-        "code_passes": code_passes,
-        "code_pass_rate": (
-            code_passes / total_runs
-            if total_runs
+        "case_id": case_id,
+        "family": case.get("family"),
+        "negative": case.get("negative", False),
+
+        "expected_decision": expected.get(
+            "expected_decision"
+        ),
+
+        "trials": trials,
+
+        "passed_trials": passed_trials,
+        "total_trials": total_trials,
+
+        "pass_rate": (
+            passed_trials / total_trials
+            if total_trials
             else 0.0
         ),
-        "completed_runs": completed_runs,
-        "total_tokens_in": total_tokens_in,
-        "total_tokens_out": total_tokens_out,
-        "total_cost_usd": total_cost,
+
+        "evaluation_complete": (
+            complete_trials == total_trials
+        ),
+
+        "tokens_in": total_tokens_in,
+        "tokens_out": total_tokens_out,
+        "cost_usd": total_cost,
+        "latency_ms": total_latency,
     }
+
+
+# ---------------------------------------------------------
+# Full evaluation set
+# ---------------------------------------------------------
+
+def run_evaluation(
+    *,
+    backend: ModelBackend,
+    model: str,
+    answer_key_path: str | Path = DEFAULT_ANSWER_KEY,
+    judge_backend: ModelBackend | None = None,
+    judge_model: str | None = None,
+    parallel_tools: bool = True,
+    autonomy: str = "confirm",
+    max_steps: int = 8,
+    budget_usd: float = 1.0,
+    guard_config: GuardConfig | None = None,
+    tool_registry: dict[str, Any] | None = None,
+    prompt_version: str = "v2",
+    system_prompt: str | None = None,
+) -> dict[str, Any]:
+    """
+    Run the complete evaluation set.
+    """
+
+    cases = load_answer_key(answer_key_path)
+
+    case_results: list[dict[str, Any]] = []
+
+    for case in cases:
+
+        result = run_case(
+            case,
+            backend=backend,
+            model=model,
+            judge_backend=judge_backend,
+            judge_model=judge_model,
+            parallel_tools=parallel_tools,
+            autonomy=autonomy,
+            max_steps=max_steps,
+            budget_usd=budget_usd,
+            guard_config=guard_config,
+            tool_registry=tool_registry,
+            prompt_version=prompt_version,
+            system_prompt=system_prompt,
+        )
+
+        case_results.append(result)
+
+    # ---------------------------------------------------------
+    # Overall metrics
+    # ---------------------------------------------------------
+
+    total_trials = sum(
+        item["total_trials"]
+        for item in case_results
+    )
+
+    passed_trials = sum(
+        item["passed_trials"]
+        for item in case_results
+    )
+
+    negative_trials = sum(
+        item["total_trials"]
+        for item in case_results
+        if item["negative"]
+    )
+
+    negative_passed = sum(
+        item["passed_trials"]
+        for item in case_results
+        if item["negative"]
+    )
+
+    ordinary_trials = total_trials - negative_trials
+    ordinary_passed = passed_trials - negative_passed
+
+    total_tokens_in = sum(
+        item["tokens_in"]
+        for item in case_results
+    )
+
+    total_tokens_out = sum(
+        item["tokens_out"]
+        for item in case_results
+    )
+
+    total_cost = sum(
+        item["cost_usd"]
+        for item in case_results
+    )
+
+    total_latency = sum(
+        item["latency_ms"]
+        for item in case_results
+    )
+
+    return {
+        "model": model,
+        "judge_model": judge_model,
+        "prompt_version": prompt_version,
+
+        "cases": len(case_results),
+
+        "total_trials": total_trials,
+        "passed_trials": passed_trials,
+
+        "pass_rate": (
+            passed_trials / total_trials
+            if total_trials
+            else 0.0
+        ),
+
+        "ordinary": {
+            "trials": ordinary_trials,
+            "passed": ordinary_passed,
+            "pass_rate": (
+                ordinary_passed / ordinary_trials
+                if ordinary_trials
+                else 0.0
+            ),
+        },
+
+        "negative": {
+            "trials": negative_trials,
+            "passed": negative_passed,
+            "pass_rate": (
+                negative_passed / negative_trials
+                if negative_trials
+                else 0.0
+            ),
+        },
+
+        # Cost-ledger metrics.
+        "tokens_in": total_tokens_in,
+        "tokens_out": total_tokens_out,
+        "cost_usd": total_cost,
+        "latency_ms": total_latency,
+
+        "results": case_results,
+    }
+
+
+# ---------------------------------------------------------
+# JSON output
+# ---------------------------------------------------------
+
+def save_results(
+    results: dict[str, Any],
+    path: str | Path,
+) -> None:
+    """Save evaluation results as reproducible JSON."""
+
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    with path.open("w", encoding="utf-8") as f:
+        json.dump(
+            results,
+            f,
+            indent=2,
+            ensure_ascii=False,
+        )
+
+
+# ---------------------------------------------------------
+# Simple command-line summary
+# ---------------------------------------------------------
+
+def print_summary(results: dict[str, Any]) -> None:
+    """Print a compact evaluation summary."""
+
+    print()
+    print("=" * 60)
+    print("EVALUATION SUMMARY")
+    print("=" * 60)
+
+    print(f"Model:          {results['model']}")
+    print(f"Judge:          {results['judge_model']}")
+    print(f"Prompt:         {results['prompt_version']}")
+
+    print()
+    print(
+        f"Overall:        "
+        f"{results['passed_trials']}/"
+        f"{results['total_trials']} "
+        f"({results['pass_rate']:.1%})"
+    )
+
+    ordinary = results["ordinary"]
+    negative = results["negative"]
+
+    print(
+        f"Ordinary:       "
+        f"{ordinary['passed']}/"
+        f"{ordinary['trials']} "
+        f"({ordinary['pass_rate']:.1%})"
+    )
+
+    print(
+        f"Negative:       "
+        f"{negative['passed']}/"
+        f"{negative['trials']} "
+        f"({negative['pass_rate']:.1%})"
+    )
+
+    print()
+    print(f"Input tokens:   {results['tokens_in']}")
+    print(f"Output tokens:  {results['tokens_out']}")
+    print(f"Cost (USD):     ${results['cost_usd']:.6f}")
+    print(f"Latency (ms):   {results['latency_ms']:.2f}")
+
+    print("=" * 60)
+
+
+# ---------------------------------------------------------
+# Optional CLI
+# ---------------------------------------------------------
+
+if __name__ == "__main__":
+
+    parser = argparse.ArgumentParser(
+        description="Run the PE6201 evaluation harness."
+    )
+
+    parser.add_argument(
+        "--answer-key",
+        default=str(DEFAULT_ANSWER_KEY),
+    )
+
+    parser.add_argument(
+        "--model",
+        required=True,
+    )
+
+    parser.add_argument(
+        "--prompt-version",
+        default="v2",
+        choices=["v1", "v2"],
+    )
+
+    parser.add_argument(
+        "--output",
+        default="evaluation_results.json",
+    )
+
+    args = parser.parse_args()
+
+    raise SystemExit(
+        "CLI execution requires the project-specific backend "
+        "and tool registry to be instantiated. Use run_evaluation() "
+        "from your notebook/runner."
+    )
