@@ -25,6 +25,23 @@
 }
 ~~~
 
+## Response bounds
+
+**Status:** Field shape is enforced by unit tests. Numeric list caps are not specified because complete claim line items and policy exclusions are required for correct decisions.
+
+| Tool | Draft response bound |
+|---|---|
+| `get_claim` | Returns exactly one claim identified by `case_id`, including only that claim's narrative, documents, and complete line items. |
+| `lookup_policy` | Returns exactly one member-to-policy result, including only the linked policy status, dates, limits, and exclusions. |
+| `check_coverage` | Returns one fixed-shape coverage result for one member and one procedure code. |
+| `get_preauthorisation` | Returns one fixed-shape pre-authorisation result for one member, procedure, and service date; at most one relevant record is exposed. |
+| `get_hospital_status` | Returns one fixed-shape result for the requested hospital only. |
+| `check_duplicate_claim` | Returns one fixed-shape duplicate result, with at most one prior claim ID and the matched-field evidence. |
+| `issue_decision_letter` | Returns one fixed-shape local logging result and appends at most one JSONL record when the gate allows it. |
+
+Lists such as claim line items and policy exclusions are not arbitrarily truncated because complete lists are required for correct coverage and duplicate-claim decisions.
+
+
 ### Seven tool contracts
 
 get_claim(case_id: str) -> ToolResult[data={
