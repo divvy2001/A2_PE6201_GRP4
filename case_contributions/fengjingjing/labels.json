@@ -1,0 +1,66 @@
+{
+  "CLM-9031": {
+    "expected_decision": "approve_in_principle",
+    "trigger": null,
+    "missing": null,
+    "family": "ordinary",
+    "must_record": [
+      "line 70553 is covered",
+      "approved_total 500",
+      "refused_total 0"
+    ],
+    "note": "Ordinary covered claim with no escalation or missing-information condition."
+  },
+
+  "CLM-9032": {
+    "expected_decision": "approve_in_principle",
+    "trigger": null,
+    "missing": null,
+    "family": "four_line_long_run",
+    "must_record": [
+      "a disposition for all 4 lines",
+      "itemised_bill present for procedure 45378",
+      "approved_total 1730"
+    ],
+    "note": "Four-line case used to exercise a longer tool-use path while remaining fully decidable."
+  },
+
+  "CLM-9033": {
+    "expected_decision": "request_document",
+    "trigger": null,
+    "missing": "pre-authorisation reference for line 62480, valid on 2026-10-13",
+    "family": "missing_preauthorisation",
+    "must_record": [
+      "procedure 62480 requires pre-authorisation",
+      "no matching pre-authorisation was found",
+      "the date it must be valid on is 2026-10-13"
+    ],
+    "note": "Pre-authorisation is required for 62480 but no matching record exists for the member."
+  },
+
+  "CLM-9034": {
+    "expected_decision": "approve_in_principle",
+    "trigger": null,
+    "missing": null,
+    "family": "duplicate_near_miss",
+    "must_record": [
+      "claim is not a duplicate",
+      "the date of service differs from the prior claim",
+      "approved_total 1400"
+    ],
+    "note": "Near-miss duplicate case: member, hospital and line match a prior claim, but date_of_service differs."
+  },
+
+  "CLM-9035": {
+    "expected_decision": "escalate",
+    "trigger": "outside_policy_dates",
+    "missing": null,
+    "family": "outside_policy_date",
+    "must_record": [
+      "POL-6001 starts on 2026-06-01",
+      "date of service is 2026-05-25",
+      "escalate_to human claims assessor"
+    ],
+    "note": "The policy is active, but the service date occurs before the policy start date."
+  }
+}
