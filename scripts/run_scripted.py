@@ -5,13 +5,17 @@ from __future__ import annotations
 import json
 
 from src.agent.loop import run_agent
+from src.agent.prompt_loader import load_prompt
 from src.backends.scripted import ScriptedBackend
 from src.schemas import GuardConfig
-from src.tools.problem_a import TOOLS
+from src.tools.versioned import get_versioned_tool_registry
 
 
 def main() -> None:
-    """Run one scripted tool call followed by a safe final escalation."""
+    """Exercise all seven tools through the loop using the v2 contract."""
+    prompt_version = "v2"
+    tool_registry = get_versioned_tool_registry(prompt_version)
+
     responses = [
         json.dumps(
             {
@@ -62,7 +66,7 @@ def main() -> None:
                         "tool": "check_coverage",
                         "args": {
                             "member_id": "M-2214",
-                            "procedure_code": "47120",
+                            "procedure_code": "62480",
                             "attached_documents": [
                                 "itemised_bill",
                                 "discharge_summary",
@@ -82,7 +86,7 @@ def main() -> None:
                         "tool": "get_preauthorisation",
                         "args": {
                             "member_id": "M-2214",
-                            "procedure_code": "47120",
+                            "procedure_code": "62480",
                             "date_of_service": "2026-09-02",
                         },
                     }
@@ -114,7 +118,7 @@ def main() -> None:
         json.dumps(
             {
                 "type": "action_block",
-                "reasoning_summary": "Record the gated local escalation decision.",
+                "reasoning_summary": "Record the completed in-principle decision.",
                 "actions": [
                     {
                         "call_id": "t07-c01",
@@ -122,15 +126,37 @@ def main() -> None:
                         "args": {
                             "case_id": "CLM-8842",
                             "decision_record": {
-                                "decision": "escalate",
-                                "trigger": "SCRIPTED_READ_ONLY_TOOL_CHAIN",
+                                "decision": "approve_in_principle",
+                                "trigger": None,
                                 "missing": None,
-                                "escalate_to": "manual_review",
-                                "line_dispositions": [],
-                                "approved_total": 0,
-                                "refused_total": 0,
+                                "escalate_to": None,
+                                "line_dispositions": [
+                                    {
+                                        "code": "47120",
+                                        "amount": 1400,
+                                        "outcome": "covered",
+                                        "reason": "covered procedure",
+                                        "evidence": ["coverage and policy checks"],
+                                    },
+                                    {
+                                        "code": "62480",
+                                        "amount": 780,
+                                        "outcome": "covered",
+                                        "reason": "valid pre-authorisation",
+                                        "evidence": ["PA-5521"],
+                                    },
+                                    {
+                                        "code": "31255",
+                                        "amount": 300,
+                                        "outcome": "refused",
+                                        "reason": "EX-14 cosmetic dermatology exclusion",
+                                        "evidence": ["EX-14"],
+                                    },
+                                ],
+                                "approved_total": 2180,
+                                "refused_total": 300,
                                 "evidence": [
-                                    "Completed the scripted read-only Problem A tool chain."
+                                    "Policy, coverage, pre-authorisation, hospital and duplicate checks completed."
                                 ],
                             },
                         },
@@ -143,15 +169,37 @@ def main() -> None:
             {
                 "type": "final",
                 "final": {
-                    "decision": "escalate",
-                    "trigger": "SCRIPTED_READ_ONLY_TOOL_CHAIN",
+                    "decision": "approve_in_principle",
+                    "trigger": None,
                     "missing": None,
-                    "escalate_to": "manual_review",
-                    "line_dispositions": [],
-                    "approved_total": 0,
-                    "refused_total": 0,
+                    "escalate_to": None,
+                    "line_dispositions": [
+                        {
+                            "code": "47120",
+                            "amount": 1400,
+                            "outcome": "covered",
+                            "reason": "covered procedure",
+                            "evidence": ["coverage and policy checks"],
+                        },
+                        {
+                            "code": "62480",
+                            "amount": 780,
+                            "outcome": "covered",
+                            "reason": "valid pre-authorisation",
+                            "evidence": ["PA-5521"],
+                        },
+                        {
+                            "code": "31255",
+                            "amount": 300,
+                            "outcome": "refused",
+                            "reason": "EX-14 cosmetic dermatology exclusion",
+                            "evidence": ["EX-14"],
+                        },
+                    ],
+                    "approved_total": 2180,
+                    "refused_total": 300,
                     "evidence": [
-                        "Completed the scripted read-only Problem A tool chain."
+                        "Policy, coverage, pre-authorisation, hospital and duplicate checks completed."
                     ],
                 },
             }
@@ -167,10 +215,33 @@ def main() -> None:
         max_steps=8,
         budget_usd=0.0,
         guard_config=GuardConfig(),
-        tool_registry=TOOLS,
-        prompt_version="v2",
+        tool_registry=tool_registry,
+        prompt_version=prompt_version,
+        system_prompt=load_prompt(prompt_version),
         operator_approved=True,
     )
+
+    called_tools = {
+        item["action"]["tool"]
+        for item in result.tool_trace
+    }
+    expected_tools = set(tool_registry)
+    write_observations = [
+        item["observation"]
+        for item in result.tool_trace
+        if item["action"]["tool"] == "issue_decision_letter"
+    ]
+
+    if result.status != "completed" or result.final is None:
+        raise RuntimeError(f"Smoke test did not complete: {result.error}")
+    if called_tools != expected_tools:
+        raise RuntimeError(
+            f"Smoke test tool coverage mismatch: {called_tools} != {expected_tools}"
+        )
+    if result.final.decision != "approve_in_principle":
+        raise RuntimeError("Smoke test produced the wrong final decision")
+    if not write_observations or write_observations[0]["data"].get("logged") is not True:
+        raise RuntimeError("Smoke test did not verify the gated JSONL write")
 
     print("Status:", result.status)
     print("Run ID:", result.run_id)
