@@ -46,7 +46,7 @@
     "must_record": [
       "claim is not a duplicate",
       "the date of service differs from the prior claim",
-      "approved_total 1400"
+      "approved_total 1500"
     ],
     "note": "Near-miss duplicate case: member, hospital and line match a prior claim, but date_of_service differs."
   },
