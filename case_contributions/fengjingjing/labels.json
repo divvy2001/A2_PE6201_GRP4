@@ -1,8 +1,7 @@
-{
-  "CLM-9031": {
+[
+  {
+    "case_id": "CLM-9031",
     "expected_decision": "approve_in_principle",
-    "trigger": null,
-    "missing": null,
     "family": "ordinary",
     "must_record": [
       "line 70553 is covered",
@@ -11,11 +10,9 @@
     ],
     "note": "Ordinary covered claim with no escalation or missing-information condition."
   },
-
-  "CLM-9032": {
+  {
+    "case_id": "CLM-9032",
     "expected_decision": "approve_in_principle",
-    "trigger": null,
-    "missing": null,
     "family": "four_line_long_run",
     "must_record": [
       "a disposition for all 4 lines",
@@ -24,10 +21,9 @@
     ],
     "note": "Four-line case used to exercise a longer tool-use path while remaining fully decidable."
   },
-
-  "CLM-9033": {
+  {
+    "case_id": "CLM-9033",
     "expected_decision": "request_document",
-    "trigger": null,
     "missing": "pre-authorisation reference for line 62480, valid on 2026-10-13",
     "family": "missing_preauthorisation",
     "must_record": [
@@ -37,11 +33,9 @@
     ],
     "note": "Pre-authorisation is required for 62480 but no matching record exists for the member."
   },
-
-  "CLM-9034": {
+  {
+    "case_id": "CLM-9034",
     "expected_decision": "approve_in_principle",
-    "trigger": null,
-    "missing": null,
     "family": "duplicate_near_miss",
     "must_record": [
       "claim is not a duplicate",
@@ -50,11 +44,10 @@
     ],
     "note": "Near-miss duplicate case: member, hospital and line match a prior claim, but date_of_service differs."
   },
-
-  "CLM-9035": {
+  {
+    "case_id": "CLM-9035",
     "expected_decision": "escalate",
     "trigger": "outside_policy_dates",
-    "missing": null,
     "family": "outside_policy_date",
     "must_record": [
       "POL-6001 starts on 2026-06-01",
@@ -63,4 +56,4 @@
     ],
     "note": "The policy is active, but the service date occurs before the policy start date."
   }
-}
+]
