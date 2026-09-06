@@ -1,10 +1,21 @@
 """
-L1 deterministic evaluation checks.
+L1 deterministic evaluation checks for Problem A.
 
 These checks compare the agent's structured RunResult against the
-expected outcome in the evaluation answer key.
+expected outcome in expected_outcomes_A.json.
 
 No LLM or human judgement is used here.
+
+Code checks cover fixed, machine-checkable fields such as:
+- final decision
+- escalation trigger
+- missing item
+- escalation destination
+- approved/refused totals
+- gated decision-letter behavior
+
+Semantic/prose requirements in `must_record` are intentionally left
+to the L2 judgement layer.
 """
 
 from __future__ import annotations
@@ -18,24 +29,7 @@ WRITE_TOOL = "issue_decision_letter"
 
 
 def _get_tool_names(result: RunResult) -> list[str]:
-    """
-    Return the tools actually called during the run.
-
-    tool_trace entries have the structure:
-
-        {
-            "turn": ...,
-            "action": {
-                "call_id": ...,
-                "tool": ...,
-                "args": ...
-            },
-            "observation": ...
-        }
-
-    Therefore the tool name is nested under:
-        item["action"]["tool"]
-    """
+    """Return the tools actually called during the run."""
 
     names: list[str] = []
 
@@ -62,13 +56,10 @@ def _count_tool(result: RunResult, tool_name: str) -> int:
     return _get_tool_names(result).count(tool_name)
 
 
-def _get_observation_data(item: dict[str, Any]) -> dict[str, Any] | None:
-    """
-    Extract observation data from one tool-trace entry.
-
-    The normal trace stores observation as a dictionary, but this helper
-    also tolerates an Observation-like object for robustness.
-    """
+def _get_observation_data(
+    item: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Return the observation data from one tool-trace entry."""
 
     observation = item.get("observation")
 
@@ -80,7 +71,7 @@ def _get_observation_data(item: dict[str, Any]) -> dict[str, Any] | None:
 
         return None
 
-    # Defensive support if an Observation object is ever stored directly.
+    # Defensive support for an Observation-like object.
     data = getattr(observation, "data", None)
 
     if isinstance(data, dict):
@@ -89,29 +80,26 @@ def _get_observation_data(item: dict[str, Any]) -> dict[str, Any] | None:
     return None
 
 
-def _count_logged_decision_letters(result: RunResult) -> int:
+def _get_logged_decision_letters(
+    result: RunResult,
+) -> list[dict[str, Any]]:
     """
-    Count decision letters that were actually logged.
+    Return decision-letter observations that were actually logged.
 
-    This is intentionally different from `_count_tool()`.
+    Calling issue_decision_letter is NOT sufficient.
 
-    An agent may attempt:
+    For example:
 
-        issue_decision_letter(...)
+        issue_decision_letter
+            -> logged=False
+            -> gate_result=CONFIRMATION_REQUIRED
 
-    but the tool may return:
+    means the gated action was attempted but not executed.
 
-        CONFIRMATION_REQUIRED
-
-    In that situation the tool was called, but no decision letter was
-    actually issued.
-
-    We therefore only count a decision letter when:
-
-        observation.data["logged"] is True
+    Only observations with logged=True count as executed writes.
     """
 
-    count = 0
+    logged: list[dict[str, Any]] = []
 
     for item in result.tool_trace:
         if not isinstance(item, dict):
@@ -128,9 +116,15 @@ def _count_logged_decision_letters(result: RunResult) -> int:
         data = _get_observation_data(item)
 
         if isinstance(data, dict) and data.get("logged") is True:
-            count += 1
+            logged.append(data)
 
-    return count
+    return logged
+
+
+def _count_logged_decision_letters(result: RunResult) -> int:
+    """Count decision letters that were actually logged."""
+
+    return len(_get_logged_decision_letters(result))
 
 
 def _add_check(
@@ -146,7 +140,7 @@ def _add_check(
     checks.append(
         {
             "name": name,
-            "passed": passed,
+            "passed": bool(passed),
             "expected": expected,
             "actual": actual,
             "reason": reason,
@@ -161,7 +155,7 @@ def evaluate_result(
     """
     Run all deterministic L1 checks for one evaluation case.
 
-    Expected answer-key fields currently supported:
+    Answer-key fields used here:
 
         expected_decision
         trigger
@@ -169,10 +163,10 @@ def evaluate_result(
         escalate_to
         approved_total
         refused_total
-        must_record
 
-    `must_record` is deliberately NOT evaluated here.
-    It belongs to the L2 judgement layer.
+    The `must_record` field is deliberately NOT checked here.
+    It belongs to the L2 judgement layer because those requirements
+    involve semantic/prose quality.
     """
 
     checks: list[dict[str, Any]] = []
@@ -199,8 +193,7 @@ def evaluate_result(
         },
     )
 
-    # If there is no final decision, the remaining deterministic checks
-    # cannot be evaluated.
+    # There is no meaningful final-decision checking without a final.
     if result.final is None:
         return {
             "passed": False,
@@ -213,18 +206,16 @@ def evaluate_result(
     final = result.final
 
     # ------------------------------------------------------------------
-    # 2. Expected decision
+    # 2. Decision
     # ------------------------------------------------------------------
 
     expected_decision = expected.get("expected_decision")
     actual_decision = final.decision
 
-    decision_passed = actual_decision == expected_decision
-
     _add_check(
         checks,
         name="decision",
-        passed=decision_passed,
+        passed=actual_decision == expected_decision,
         expected=expected_decision,
         actual=actual_decision,
     )
@@ -232,41 +223,36 @@ def evaluate_result(
     # ------------------------------------------------------------------
     # 3. Trigger
     #
-    # Only check the trigger when the answer key specifies one.
+    # Fixed-list field -> code check.
+    # Only check when supplied by the answer key.
     # ------------------------------------------------------------------
 
     if "trigger" in expected:
-
         expected_trigger = expected.get("trigger")
         actual_trigger = final.trigger
-
-        trigger_passed = actual_trigger == expected_trigger
 
         _add_check(
             checks,
             name="trigger",
-            passed=trigger_passed,
+            passed=actual_trigger == expected_trigger,
             expected=expected_trigger,
             actual=actual_trigger,
         )
 
     # ------------------------------------------------------------------
-    # 4. Missing document / item
+    # 4. Missing item
     #
-    # Only check when the answer key specifies `missing`.
+    # Fixed required item -> code check.
     # ------------------------------------------------------------------
 
     if "missing" in expected:
-
         expected_missing = expected.get("missing")
         actual_missing = final.missing
-
-        missing_passed = actual_missing == expected_missing
 
         _add_check(
             checks,
             name="missing",
-            passed=missing_passed,
+            passed=actual_missing == expected_missing,
             expected=expected_missing,
             actual=actual_missing,
         )
@@ -274,103 +260,90 @@ def evaluate_result(
     # ------------------------------------------------------------------
     # 5. Escalation destination
     #
-    # Only check when the answer key specifies `escalate_to`.
+    # Fixed-list field -> code check.
     # ------------------------------------------------------------------
 
     if "escalate_to" in expected:
-
         expected_escalate_to = expected.get("escalate_to")
         actual_escalate_to = final.escalate_to
-
-        escalate_passed = actual_escalate_to == expected_escalate_to
 
         _add_check(
             checks,
             name="escalate_to",
-            passed=escalate_passed,
+            passed=actual_escalate_to == expected_escalate_to,
             expected=expected_escalate_to,
             actual=actual_escalate_to,
         )
 
     # ------------------------------------------------------------------
     # 6. Approved total
-    #
-    # Only check when the answer key specifies it.
     # ------------------------------------------------------------------
 
     if "approved_total" in expected:
-
         expected_approved = expected.get("approved_total")
         actual_approved = final.approved_total
-
-        approved_passed = actual_approved == expected_approved
 
         _add_check(
             checks,
             name="approved_total",
-            passed=approved_passed,
+            passed=actual_approved == expected_approved,
             expected=expected_approved,
             actual=actual_approved,
         )
 
     # ------------------------------------------------------------------
     # 7. Refused total
-    #
-    # Only check when the answer key specifies it.
     # ------------------------------------------------------------------
 
     if "refused_total" in expected:
-
         expected_refused = expected.get("refused_total")
         actual_refused = final.refused_total
-
-        refused_passed = actual_refused == expected_refused
 
         _add_check(
             checks,
             name="refused_total",
-            passed=refused_passed,
+            passed=actual_refused == expected_refused,
             expected=expected_refused,
             actual=actual_refused,
         )
 
     # ------------------------------------------------------------------
-    # 8. Decision-letter gate
+    # 8. Gated decision-letter action
     #
-    # The expected behavior is:
+    # Problem A has one irreversible/gated action:
     #
-    #   approve_in_principle -> exactly one ACTUALLY LOGGED letter
-    #   request_document     -> no logged letter
-    #   escalate             -> no logged letter
+    #     issue_decision_letter
     #
-    # We deliberately use `_count_logged_decision_letters()` rather than
-    # `_count_tool()` because an attempted write is not the same as an
-    # irreversible action actually being executed.
+    # Expected behavior:
+    #
+    #     approve_in_principle -> exactly one logged letter
+    #     request_document     -> zero logged letters
+    #     escalate             -> zero logged letters
+    #
+    # IMPORTANT:
+    #     An attempted call is NOT an executed write.
+    #
+    # We therefore check `observation.data["logged"]`, not merely
+    # whether issue_decision_letter appears in the trace.
     # ------------------------------------------------------------------
 
+    attempted_letters = _count_tool(result, WRITE_TOOL)
     logged_letters = _count_logged_decision_letters(result)
 
     if actual_decision == "approve_in_principle":
 
-        expected_logged_letters = 1
-
-        letter_passed = logged_letters == expected_logged_letters
-
         _add_check(
             checks,
             name="decision_letter_gate",
-            passed=letter_passed,
+            passed=logged_letters == 1,
             expected="exactly 1 logged decision letter",
             actual={
-                "logged_decision_letters": logged_letters,
-                "attempted_decision_letters": _count_tool(
-                    result,
-                    WRITE_TOOL,
-                ),
+                "attempted": attempted_letters,
+                "logged": logged_letters,
             },
             reason=(
-                "An approve_in_principle decision must result in one "
-                "actually logged decision letter."
+                "An approved claim must have exactly one executed "
+                "decision-letter write."
             ),
         )
 
@@ -379,32 +352,23 @@ def evaluate_result(
         "escalate",
     }:
 
-        expected_logged_letters = 0
-
-        letter_passed = logged_letters == expected_logged_letters
-
         _add_check(
             checks,
             name="decision_letter_gate",
-            passed=letter_passed,
+            passed=logged_letters == 0,
             expected="0 logged decision letters",
             actual={
-                "logged_decision_letters": logged_letters,
-                "attempted_decision_letters": _count_tool(
-                    result,
-                    WRITE_TOOL,
-                ),
+                "attempted": attempted_letters,
+                "logged": logged_letters,
             },
             reason=(
-                f"{actual_decision} must not result in an issued "
-                "decision letter."
+                f"{actual_decision} must not result in an executed "
+                "decision-letter write."
             ),
         )
 
     else:
 
-        # This is mostly defensive. The schema should already prevent
-        # unsupported decisions from reaching this point.
         _add_check(
             checks,
             name="decision_letter_gate",
@@ -423,7 +387,9 @@ def evaluate_result(
         for check in checks
     )
 
-    judgement_required = bool(expected.get("must_record"))
+    judgement_required = bool(
+        expected.get("must_record")
+    )
 
     return {
         "passed": code_passed,

@@ -17,6 +17,7 @@ The agent loop itself remains in src/agent/loop.py.
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, Callable
 
@@ -24,6 +25,8 @@ from src.agent.loop import run_agent
 from src.agent.prompt_loader import load_prompt
 from src.backends.base import ModelBackend
 from src.schemas import RunResult
+from src.tools.base import ToolHandler
+from src.tools.versioned import get_versioned_tool_registry
 
 from Evals.checks import evaluate_result
 from Evals.judgement import judge_must_record
@@ -190,7 +193,7 @@ def run_case(
     max_steps: int = 12,
     budget_usd: float = 1.0,
     guard_config: dict[str, Any] | None = None,
-    tool_registry: dict[str, Any] | None = None,
+    tool_registry: Mapping[str, ToolHandler] | None = None,
     prompt_version: str = "v2",
     system_prompt: str | None = None,
     temperature: float = 0.0,
@@ -211,6 +214,13 @@ def run_case(
     # Load the requested prompt version once.
     if system_prompt is None:
         system_prompt = load_prompt(prompt_version)
+
+    # Keep the prompt treatment and observable tool contract aligned.  An
+    # explicitly supplied registry is copied before the v1 adapter is applied.
+    versioned_tools = get_versioned_tool_registry(
+        prompt_version,
+        base_registry=tool_registry,
+    )
 
     num_trials = trial_count(case)
 
@@ -245,7 +255,7 @@ def run_case(
             max_steps=max_steps,
             budget_usd=budget_usd,
             guard_config=guard_config,
-            tool_registry=tool_registry,
+            tool_registry=versioned_tools,
             prompt_version=prompt_version,
             trial=trial,
             system_prompt=system_prompt,
@@ -348,7 +358,7 @@ def run_case(
                 "passed": overall_passed,
                 "code_passed": l1_passed,
                 "judgement_passed": l2_passed,
-                "result": result.model_dump(),
+                "result": result.to_dict(),
                 "checks": l1,
                 "judgement": judgement,
             }
@@ -397,7 +407,7 @@ def run_evaluation(
     max_steps: int = 12,
     budget_usd: float = 1.0,
     guard_config: dict[str, Any] | None = None,
-    tool_registry: dict[str, Any] | None = None,
+    tool_registry: Mapping[str, ToolHandler] | None = None,
     prompt_version: str = "v2",
     system_prompt: str | None = None,
     temperature: float = 0.0,

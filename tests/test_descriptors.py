@@ -55,6 +55,24 @@ class DescriptorTests(unittest.TestCase):
             for tool_name in specs:
                 self.assertIn(tool_name, prompt)
 
+    def test_prompts_include_frozen_decision_contract(self):
+        required_text = (
+            "policy_lapsed",
+            "outside_policy_dates",
+            "annual_limit_exceeded",
+            "duplicate_claim",
+            "instruction_in_member_narrative",
+            "human claims assessor",
+            "covered_with_valid_preauth",
+            "{code, amount, outcome, reason, evidence}",
+        )
+
+        for version in ("v1", "v2"):
+            prompt = load_prompt(version)
+
+            for expected_text in required_text:
+                self.assertIn(expected_text, prompt)
+                
 
 if __name__ == "__main__":
     unittest.main()

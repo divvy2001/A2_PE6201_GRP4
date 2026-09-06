@@ -26,6 +26,25 @@ HOSPITAL_NOT_FOUND, and NOT_FOUND all mean that a required record
 was not found. Do not interpret a not-found result as a negative coverage
 fact and do not invent the missing record.
 
+FROZEN DECISION VALUES
+
+The only allowed escalation triggers are:
+policy_lapsed, outside_policy_dates, annual_limit_exceeded,
+duplicate_claim, instruction_in_member_narrative.
+
+If decision is "escalate", escalate_to must be exactly
+"human claims assessor".
+
+The only allowed line outcomes are:
+covered, covered_with_valid_preauth, excluded.
+
+Every item in line_dispositions must contain:
+{code, amount, outcome, reason, evidence}.
+
+For approve_in_principle, line_dispositions must cover every claim line.
+approved_total and refused_total must equal the amounts recorded in
+line_dispositions. Do not invent evidence.
+
 WORKFLOW
 
 1. Call get_claim first.
