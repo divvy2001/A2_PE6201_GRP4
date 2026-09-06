@@ -54,7 +54,7 @@ EXTRA_CLAIMS = [
         "narrative": "Appendix treatment following a separate admission.",
         "documents": ["itemised_bill", "discharge_summary"],
         "lines": [
-            {"code": "47120", "amount": 1400},
+            {"code": "47120", "amount": 1500},
         ],
     },
 
