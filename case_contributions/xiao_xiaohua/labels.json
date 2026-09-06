@@ -1,0 +1,58 @@
+[
+  {
+    "case_id": "CLM-9011",
+    "expected_decision": "approve_in_principle",
+    "family": "ordinary_short",
+    "must_record": [
+      "1 line covered",
+      "approved_total 180",
+      "not a duplicate"
+    ],
+    "note": "Short baseline run: active policy, one covered consultation, and no pre-authorisation requirement."
+  },
+  {
+    "case_id": "CLM-9012",
+    "expected_decision": "approve_in_principle",
+    "family": "multi_line",
+    "must_record": [
+      "a disposition for all 4 lines",
+      "itemised_bill present for procedure 45378",
+      "approved_total 1990"
+    ],
+    "note": "Multi-line covered claim. The required document for 45378 is present."
+  },
+  {
+    "case_id": "CLM-9013",
+    "expected_decision": "request_document",
+    "family": "missing_required_document",
+    "missing": "itemised_bill for procedure 45378",
+    "must_record": [
+      "45378 requires itemised_bill",
+      "itemised_bill is missing"
+    ],
+    "note": "Required-document case: no itemised bill was attached."
+  },
+  {
+    "case_id": "CLM-9014",
+    "expected_decision": "request_document",
+    "family": "expired_preauthorisation",
+    "missing": "a current pre-authorisation for procedure 29881",
+    "must_record": [
+      "PA-5640 found",
+      "PA-5640 expired on 2026-05-31",
+      "date of service is 2026-10-04"
+    ],
+    "note": "The member has an earlier pre-authorisation, but it is invalid on the date of service."
+  },
+  {
+    "case_id": "CLM-9015",
+    "expected_decision": "escalate",
+    "family": "true_duplicate",
+    "trigger": "DUPLICATE_CLAIM",
+    "must_record": [
+      "prior claim CLM-8715",
+      "matched member_id, hospital_id, date_of_service, and complete lines"
+    ],
+    "note": "Second true duplicate: the queue claim matches the added decided history record on all four required facts."
+  }
+]
