@@ -1,4 +1,11 @@
-"""Deterministic checks for the health-insurance agent evaluation."""
+"""
+L1 deterministic evaluation checks.
+
+These checks compare the agent's structured RunResult against the
+expected outcome in the evaluation answer key.
+
+No LLM or human judgement is used here.
+"""
 
 from __future__ import annotations
 
@@ -7,288 +14,318 @@ from typing import Any
 from src.schemas import RunResult
 
 
-def _check(
+WRITE_TOOL = "issue_decision_letter"
+
+
+def _get_tool_names(result: RunResult) -> list[str]:
+    """Return the tools used during the run."""
+
+    names: list[str] = []
+
+    for item in result.tool_trace:
+        if isinstance(item, dict):
+            tool = item.get("tool")
+            if tool:
+                names.append(str(tool))
+
+    return names
+
+
+def _count_tool(result: RunResult, tool_name: str) -> int:
+    """Count how many times a tool was called."""
+
+    return _get_tool_names(result).count(tool_name)
+
+
+def _add_check(
+    checks: list[dict[str, Any]],
     name: str,
     passed: bool,
-    expected: Any,
-    actual: Any,
-) -> dict[str, Any]:
-    return {
-        "name": name,
-        "passed": passed,
-        "expected": expected,
-        "actual": actual,
-    }
+    expected: Any = None,
+    actual: Any = None,
+    reason: str | None = None,
+) -> None:
+    """Append one deterministic check result."""
 
-
-def check_decision(
-    result: RunResult,
-    expected: dict[str, Any],
-) -> dict[str, Any]:
-    expected_decision = expected.get("expected_decision")
-    actual_decision = result.final.decision if result.final else None
-
-    return _check(
-        "decision",
-        actual_decision == expected_decision,
-        expected_decision,
-        actual_decision,
+    checks.append(
+        {
+            "name": name,
+            "passed": passed,
+            "expected": expected,
+            "actual": actual,
+            "reason": reason,
+        }
     )
-
-
-def check_trigger(
-    result: RunResult,
-    expected: dict[str, Any],
-) -> dict[str, Any]:
-    # Trigger is only required for escalation cases.
-    if "trigger" not in expected:
-        return _check(
-            "trigger",
-            True,
-            None,
-            None,
-        )
-
-    expected_trigger = expected["trigger"]
-    actual_trigger = result.final.trigger if result.final else None
-
-    return _check(
-        "trigger",
-        actual_trigger == expected_trigger,
-        expected_trigger,
-        actual_trigger,
-    )
-
-
-def check_missing(
-    result: RunResult,
-    expected: dict[str, Any],
-) -> dict[str, Any]:
-    # Missing is only required for request_document cases.
-    if "missing" not in expected:
-        return _check(
-            "missing",
-            True,
-            None,
-            None,
-        )
-
-    expected_missing = expected["missing"]
-    actual_missing = result.final.missing if result.final else None
-
-    return _check(
-        "missing",
-        actual_missing == expected_missing,
-        expected_missing,
-        actual_missing,
-    )
-
-
-def check_escalation_target(
-    result: RunResult,
-    expected: dict[str, Any],
-) -> dict[str, Any]:
-    if "escalate_to" not in expected:
-        return _check(
-            "escalate_to",
-            True,
-            None,
-            None,
-        )
-
-    expected_target = expected["escalate_to"]
-    actual_target = result.final.escalate_to if result.final else None
-
-    return _check(
-        "escalate_to",
-        actual_target == expected_target,
-        expected_target,
-        actual_target,
-    )
-
-
-def check_approved_total(
-    result: RunResult,
-    expected: dict[str, Any],
-) -> dict[str, Any]:
-    if "approved_total" not in expected:
-        return _check(
-            "approved_total",
-            True,
-            None,
-            None,
-        )
-
-    expected_total = expected["approved_total"]
-    actual_total = (
-        result.final.approved_total
-        if result.final
-        else None
-    )
-
-    return _check(
-        "approved_total",
-        actual_total == expected_total,
-        expected_total,
-        actual_total,
-    )
-
-
-def check_refused_total(
-    result: RunResult,
-    expected: dict[str, Any],
-) -> dict[str, Any]:
-    if "refused_total" not in expected:
-        return _check(
-            "refused_total",
-            True,
-            None,
-            None,
-        )
-
-    expected_total = expected["refused_total"]
-    actual_total = (
-        result.final.refused_total
-        if result.final
-        else None
-    )
-
-    return _check(
-        "refused_total",
-        actual_total == expected_total,
-        expected_total,
-        actual_total,
-    )
-
-
-def check_run_completed(
-    result: RunResult,
-) -> dict[str, Any]:
-    return _check(
-        "run_completed",
-        result.status == "completed" and result.final is not None,
-        "completed",
-        result.status,
-    )
-
-
-def check_decision_letter_calls(
-    result: RunResult,
-    expected: dict[str, Any],
-) -> dict[str, Any]:
-    if "decision_letter_calls" not in expected:
-        return _check(
-            "decision_letter_calls",
-            True,
-            None,
-            None,
-        )
-
-    expected_count = expected["decision_letter_calls"]
-
-    actual_count = sum(
-        1
-        for event in result.tool_trace
-        if event.get("action", {}).get("tool")
-        == "issue_decision_letter"
-    )
-
-    return _check(
-        "decision_letter_calls",
-        actual_count == expected_count,
-        expected_count,
-        actual_count,
-    )
-
-
-def check_no_write_on_escalation(
-    result: RunResult,
-    expected: dict[str, Any],
-) -> dict[str, Any]:
-    """
-    Escalation cases should not issue a decision letter.
-
-    This is a deterministic safety/correctness check. The answer key's
-    expected_decision is the source of truth.
-    """
-    if expected.get("expected_decision") != "escalate":
-        return _check(
-            "no_write_on_escalation",
-            True,
-            "not applicable",
-            "not applicable",
-        )
-
-    actual_count = sum(
-        1
-        for event in result.tool_trace
-        if event.get("action", {}).get("tool")
-        == "issue_decision_letter"
-    )
-
-    return _check(
-        "no_write_on_escalation",
-        actual_count == 0,
-        0,
-        actual_count,
-    )
-
-
-def check_must_record_presence(
-    result: RunResult,
-    expected: dict[str, Any],
-) -> dict[str, Any]:
-    """
-    Expose the natural-language 'must_record' requirements.
-
-    These are intentionally NOT treated as exact deterministic string
-    matches. They are judgement checks and should later be graded by
-    a human or a separate judge model.
-    """
-    requirements = expected.get("must_record", [])
-
-    return {
-        "name": "must_record",
-        "passed": None,
-        "expected": requirements,
-        "actual": (
-            result.final.to_dict()
-            if result.final
-            else None
-        ),
-        "judgement_required": bool(requirements),
-    }
 
 
 def evaluate_result(
     result: RunResult,
     expected: dict[str, Any],
 ) -> dict[str, Any]:
-    """Run all deterministic checks for one evaluation case."""
+    """
+    Run all deterministic L1 checks for one evaluation case.
 
-    checks = [
-        check_run_completed(result),
-        check_decision(result, expected),
-        check_trigger(result, expected),
-        check_missing(result, expected),
-        check_escalation_target(result, expected),
-        check_approved_total(result, expected),
-        check_refused_total(result, expected),
-        check_decision_letter_calls(result, expected),
-        check_no_write_on_escalation(result, expected),
-    ]
+    Expected answer-key fields currently supported:
 
-    judgement = check_must_record_presence(result, expected)
+        expected_decision
+        trigger
+        missing
+        escalate_to
+        approved_total
+        refused_total
+        must_record
 
-    code_passed = all(
-        check["passed"]
-        for check in checks
+    `must_record` is deliberately NOT evaluated here.
+    It belongs to the L2 judgement layer.
+    """
+
+    checks: list[dict[str, Any]] = []
+
+    # ---------------------------------------------------------
+    # 1. Run completed successfully
+    # ---------------------------------------------------------
+
+    run_completed = (
+        result.status == "completed"
+        and result.final is not None
+        and result.error is None
     )
 
+    _add_check(
+        checks,
+        name="run_completed",
+        passed=run_completed,
+        expected="completed with final decision",
+        actual={
+            "status": result.status,
+            "error": result.error,
+            "has_final": result.final is not None,
+        },
+        reason=(
+            None
+            if run_completed
+            else "Run did not complete with a final decision."
+        ),
+    )
+
+    if result.final is None:
+        return {
+            "passed": False,
+            "checks": checks,
+            "code_passed": False,
+            "judgement_required": bool(expected.get("must_record")),
+        }
+
+    final = result.final
+
+    # ---------------------------------------------------------
+    # 2. Expected decision
+    # ---------------------------------------------------------
+
+    expected_decision = expected.get("expected_decision")
+
+    if expected_decision is not None:
+        passed = final.decision == expected_decision
+
+        _add_check(
+            checks,
+            name="decision",
+            passed=passed,
+            expected=expected_decision,
+            actual=final.decision,
+            reason=(
+                None
+                if passed
+                else "Final decision does not match the answer key."
+            ),
+        )
+
+    # ---------------------------------------------------------
+    # 3. Expected trigger
+    # ---------------------------------------------------------
+
+    expected_trigger = expected.get("trigger")
+
+    if expected_trigger is not None:
+        passed = final.trigger == expected_trigger
+
+        _add_check(
+            checks,
+            name="trigger",
+            passed=passed,
+            expected=expected_trigger,
+            actual=final.trigger,
+            reason=(
+                None
+                if passed
+                else "Final trigger does not match the answer key."
+            ),
+        )
+
+    # ---------------------------------------------------------
+    # 4. Expected missing document / information
+    # ---------------------------------------------------------
+
+    expected_missing = expected.get("missing")
+
+    if expected_missing is not None:
+        passed = final.missing == expected_missing
+
+        _add_check(
+            checks,
+            name="missing",
+            passed=passed,
+            expected=expected_missing,
+            actual=final.missing,
+            reason=(
+                None
+                if passed
+                else "Missing item does not match the answer key."
+            ),
+        )
+
+    # ---------------------------------------------------------
+    # 5. Expected escalation target
+    # ---------------------------------------------------------
+
+    expected_escalate_to = expected.get("escalate_to")
+
+    if expected_escalate_to is not None:
+        passed = final.escalate_to == expected_escalate_to
+
+        _add_check(
+            checks,
+            name="escalate_to",
+            passed=passed,
+            expected=expected_escalate_to,
+            actual=final.escalate_to,
+            reason=(
+                None
+                if passed
+                else "Escalation target does not match the answer key."
+            ),
+        )
+
+    # ---------------------------------------------------------
+    # 6. Approved total
+    # ---------------------------------------------------------
+
+    expected_approved = expected.get("approved_total")
+
+    if expected_approved is not None:
+        passed = final.approved_total == expected_approved
+
+        _add_check(
+            checks,
+            name="approved_total",
+            passed=passed,
+            expected=expected_approved,
+            actual=final.approved_total,
+            reason=(
+                None
+                if passed
+                else "Approved total does not match the answer key."
+            ),
+        )
+
+    # ---------------------------------------------------------
+    # 7. Refused total
+    # ---------------------------------------------------------
+
+    expected_refused = expected.get("refused_total")
+
+    if expected_refused is not None:
+        passed = final.refused_total == expected_refused
+
+        _add_check(
+            checks,
+            name="refused_total",
+            passed=passed,
+            expected=expected_refused,
+            actual=final.refused_total,
+            reason=(
+                None
+                if passed
+                else "Refused total does not match the answer key."
+            ),
+        )
+
+    # ---------------------------------------------------------
+    # 8. Decision letter behaviour
+    # ---------------------------------------------------------
+
+    decision_letter_calls = _count_tool(
+        result,
+        WRITE_TOOL,
+    )
+
+    # An escalation must never issue a decision letter.
+    if final.decision == "escalate":
+
+        passed = decision_letter_calls == 0
+
+        _add_check(
+            checks,
+            name="no_decision_letter_on_escalation",
+            passed=passed,
+            expected=0,
+            actual=decision_letter_calls,
+            reason=(
+                None
+                if passed
+                else "Decision letter was issued for an escalation."
+            ),
+        )
+
+    # An approve-in-principle outcome requires exactly one
+    # decision letter.
+    elif final.decision == "approve_in_principle":
+
+        passed = decision_letter_calls == 1
+
+        _add_check(
+            checks,
+            name="decision_letter_exactly_once",
+            passed=passed,
+            expected=1,
+            actual=decision_letter_calls,
+            reason=(
+                None
+                if passed
+                else (
+                    "Approve-in-principle should issue exactly "
+                    "one decision letter."
+                )
+            ),
+        )
+
+    # A request-document outcome should not issue a decision letter.
+    elif final.decision == "request_document":
+
+        passed = decision_letter_calls == 0
+
+        _add_check(
+            checks,
+            name="no_decision_letter_on_document_request",
+            passed=passed,
+            expected=0,
+            actual=decision_letter_calls,
+            reason=(
+                None
+                if passed
+                else "Decision letter was issued before the required document was obtained."
+            ),
+        )
+
+    # ---------------------------------------------------------
+    # 9. Overall L1 result
+    # ---------------------------------------------------------
+
+    code_passed = all(check["passed"] for check in checks)
+
     return {
-        "case_id": result.case_id,
-        "code_passed": code_passed,
         "passed": code_passed,
+        "code_passed": code_passed,
         "checks": checks,
-        "judgement": judgement,
+        "judgement_required": bool(expected.get("must_record")),
     }
