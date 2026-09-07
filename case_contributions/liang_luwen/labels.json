@@ -1,0 +1,72 @@
+[
+  {
+    "case_id": "CLM-9051",
+    "expected_decision": "approve_in_principle",
+    "family": "ordinary_low_cost_single_line",
+    "approved_total": 45,
+    "refused_total": 0,
+    "must_record": [
+      "line 80053 is covered",
+      "approved_total 45",
+      "refused_total 0"
+    ],
+    "note": "Low-cost single-line baseline using an active policy, panel hospital, covered procedure, and no pre-authorisation requirement."
+  },
+  {
+    "case_id": "CLM-9052",
+    "expected_decision": "approve_in_principle",
+    "family": "ordinary_two_line",
+    "approved_total": 700,
+    "refused_total": 0,
+    "must_record": [
+      "a disposition for both lines",
+      "99213 covered for 160",
+      "70553 covered for 540",
+      "approved_total 700",
+      "refused_total 0"
+    ],
+    "note": "Two-line ordinary case with independent covered procedures and no pre-authorisation branch."
+  },
+  {
+    "case_id": "CLM-9053",
+    "expected_decision": "approve_in_principle",
+    "family": "four_line_with_valid_preauth",
+    "approved_total": 6890,
+    "refused_total": 0,
+    "must_record": [
+      "a disposition for all 4 lines",
+      "PA-5702 cited for line 27447",
+      "PA-5702 is valid on 2026-10-23",
+      "discharge_summary is present for line 27447",
+      "approved_total 6890",
+      "refused_total 0"
+    ],
+    "note": "Longer four-line ordinary trajectory that combines multi-line processing with one valid pre-authorisation branch."
+  },
+  {
+    "case_id": "CLM-9054",
+    "expected_decision": "approve_in_principle",
+    "family": "exact_remaining_limit",
+    "approved_total": 600,
+    "refused_total": 0,
+    "must_record": [
+      "POL-4102 has 600 remaining",
+      "claim total is exactly 600",
+      "the claim does not exceed the remaining annual limit",
+      "approved_total 600"
+    ],
+    "note": "Exact boundary case. The frozen workflow escalates only when claim total is greater than the remaining limit, so equality must remain payable."
+  },
+  {
+    "case_id": "CLM-9055",
+    "expected_decision": "request_document",
+    "missing": "itemised bill for line 45378",
+    "family": "missing_required_document_multiline",
+    "must_record": [
+      "45378 requires itemised_bill",
+      "itemised_bill is missing for line 45378",
+      "line 99213 was independently resolved as covered for 180"
+    ],
+    "note": "Two-line ask case: the missing document blocks final approval for 45378, while the already-resolved 99213 line should still be recorded."
+  }
+]
