@@ -1,0 +1,63 @@
+[
+  {
+    "case_id": "CLM-9041",
+    "expected_decision": "approve_in_principle",
+    "family": "annual_limit_exact_boundary",
+    "must_record": [
+      "POL-4102 has 600 remaining",
+      "claim total 600",
+      "approved_total 600",
+      "refused_total 0"
+    ],
+    "note": "A claim equal to the remaining annual limit is within the limit and must not be escalated."
+  },
+  {
+    "case_id": "CLM-9042",
+    "expected_decision": "approve_in_principle",
+    "family": "multiple_exclusions_partly_payable",
+    "must_record": [
+      "line 70553 is covered for 500",
+      "lines 31255 and 15823 are refused under EX-14 cosmetic dermatology",
+      "approved_total 500",
+      "refused_total 650"
+    ],
+    "note": "The decision must preserve the result for all three lines and apply the same exclusion rule twice."
+  },
+  {
+    "case_id": "CLM-9043",
+    "expected_decision": "request_document",
+    "missing": "pre-authorisation reference for member M-5502 and line 62480, valid on 2026-10-23",
+    "family": "preauthorisation_wrong_member",
+    "must_record": [
+      "procedure 62480 requires pre-authorisation",
+      "PA-5521 belongs to M-2214 and cannot authorise M-5502",
+      "a matching pre-authorisation for M-5502 was not found",
+      "the date it must be valid on is 2026-10-23"
+    ],
+    "note": "A valid-looking authorisation must be matched on member as well as procedure and date."
+  },
+  {
+    "case_id": "CLM-9044",
+    "expected_decision": "approve_in_principle",
+    "family": "duplicate_near_miss_amount",
+    "must_record": [
+      "claim is not a duplicate",
+      "CLM-8710 has amount 1500 while this claim has amount 1499",
+      "approved_total 1499",
+      "refused_total 0"
+    ],
+    "note": "Member, hospital, date and procedure match the historical claim, but the complete line item differs in amount."
+  },
+  {
+    "case_id": "CLM-9045",
+    "expected_decision": "approve_in_principle",
+    "family": "preauthorisation_valid_to_boundary",
+    "must_record": [
+      "PA-5521 cited for line 62480",
+      "PA-5521 is valid through 2026-10-31",
+      "date of service 2026-10-31 is within the validity period",
+      "approved_total 1000"
+    ],
+    "note": "The final valid_to date is inclusive and must not be treated as expired."
+  }
+]
