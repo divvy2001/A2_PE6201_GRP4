@@ -67,5 +67,20 @@
         "rule": "EX-14 cosmetic dermatology"
       }
     ]
+  },
+  {
+    "policy_id": "POL-9025",
+    "product": "Shield Basic",
+    "status": "lapsed",
+    "start_date": "2026-01-01",
+    "end_date": "2026-12-31",
+    "annual_limit": 12000,
+    "used_to_date": 1000,
+    "exclusions": [
+      {
+        "code": "31255",
+        "rule": "EX-14 cosmetic dermatology"
+      }
+    ]
   }
 ]

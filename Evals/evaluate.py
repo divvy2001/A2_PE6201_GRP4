@@ -51,6 +51,11 @@ TEMPERATURE = 0.0
 # judge model/backend is supplied, that L2 check is explicitly marked not_run.
 JUDGE_MODEL: str | None = None
 
+# L2 judge pricing (USD per 1M tokens).
+# Update these values if you choose a different judge model.
+JUDGE_PRICE_IN = 0.10
+JUDGE_PRICE_OUT = 0.40
+
 DEFAULT_ANSWER_KEY = (
     Path(__file__).resolve().parent.parent
     / "reference_data"
@@ -64,6 +69,7 @@ DEFAULT_RESULTS = Path(__file__).resolve().parent / "results.json"
 # =====================================================================
 
 NEGATIVE_FAMILIES = {
+    # Reference negative families
     "preauth_absent",
     "preauth_expired",
     "policy_lapsed",
@@ -72,6 +78,15 @@ NEGATIVE_FAMILIES = {
     "duplicate_of_decided_claim",
     "prompt_injection_overt",
     "prompt_injection_imitating_tool_output",
+
+    # Contributor negative families
+    "missing_required_document",
+    "missing_required_document_multiline",
+    "missing_preauthorisation",
+    "expired_preauthorisation",
+    "true_duplicate",
+    "outside_policy_date",
+    "preauthorisation_wrong_member",
 }
 
 def load_answer_key(path: Path = DEFAULT_ANSWER_KEY) -> list[dict[str, Any]]:
@@ -175,6 +190,8 @@ def run_case(
     trials: list[dict[str, Any]] = []
     total_in = total_out = 0
     total_cost = total_latency = 0.0
+    total_judge_in = total_judge_out = 0
+    total_judge_cost = total_judge_latency = 0.0
 
     for trial in range(1, trial_count(case) + 1):
         result: RunResult = run_agent(
@@ -227,6 +244,12 @@ def run_case(
         total_cost += result.cost_usd
         total_latency += result.latency_ms or 0.0
 
+        if judgement and judgement.get("status") == "completed":
+            total_judge_in += int(judgement.get("tokens_in", 0) or 0)
+            total_judge_out += int(judgement.get("tokens_out", 0) or 0)
+            total_judge_cost += float(judgement.get("cost_usd", 0.0) or 0.0)
+            total_judge_latency += float(judgement.get("latency_ms", 0.0) or 0.0)
+
         trials.append({
             "trial": trial,
             "passed": passed,
@@ -248,7 +271,14 @@ def run_case(
         "tokens_in": total_in,
         "tokens_out": total_out,
         "cost_usd": total_cost,
-        "latency_ms": total_latency,
+        "judge_tokens_in": total_judge_in,
+        "judge_tokens_out": total_judge_out,
+        "judge_cost_usd": total_judge_cost,
+        "judge_latency_ms": total_judge_latency,
+        "total_tokens_in": total_in + total_judge_in,
+        "total_tokens_out": total_out + total_judge_out,
+        "total_cost_usd": total_cost + total_judge_cost,
+        "latency_ms": total_latency + total_judge_latency,
     }
 
 
@@ -305,6 +335,13 @@ def run_evaluation(
         "tokens_in": sum(r["tokens_in"] for r in results),
         "tokens_out": sum(r["tokens_out"] for r in results),
         "cost_usd": sum(r["cost_usd"] for r in results),
+        "judge_tokens_in": sum(r["judge_tokens_in"] for r in results),
+        "judge_tokens_out": sum(r["judge_tokens_out"] for r in results),
+        "judge_cost_usd": sum(r["judge_cost_usd"] for r in results),
+        "judge_latency_ms": sum(r["judge_latency_ms"] for r in results),
+        "total_tokens_in": sum(r["total_tokens_in"] for r in results),
+        "total_tokens_out": sum(r["total_tokens_out"] for r in results),
+        "total_cost_usd": sum(r["total_cost_usd"] for r in results),
         "latency_ms": sum(r["latency_ms"] for r in results),
     }
 
@@ -342,10 +379,16 @@ def print_summary(evaluation: dict[str, Any]) -> None:
     print(f"Overall:        {s['passed_cases']}/{s['total_cases']} ({s['case_pass_rate']:.1%})")
     print(f"Ordinary:       {s['ordinary_passed']}/{s['ordinary_cases']} ({s['ordinary_pass_rate']:.1%})")
     print(f"Negative:       {s['negative_passed']}/{s['negative_cases']} ({s['negative_pass_rate']:.1%})")
-    print(f"Tokens in:      {s['tokens_in']}")
-    print(f"Tokens out:     {s['tokens_out']}")
-    print(f"Cost:           ${s['cost_usd']:.6f}")
-    print(f"Latency:        {s['latency_ms']:.2f} ms")
+    print(f"Agent tokens in:    {s['tokens_in']}")
+    print(f"Agent tokens out:   {s['tokens_out']}")
+    print(f"Agent cost:         ${s['cost_usd']:.6f}")
+    print(f"Judge tokens in:    {s['judge_tokens_in']}")
+    print(f"Judge tokens out:   {s['judge_tokens_out']}")
+    print(f"Judge cost:         ${s['judge_cost_usd']:.6f}")
+    print(f"Total tokens in:    {s['total_tokens_in']}")
+    print(f"Total tokens out:   {s['total_tokens_out']}")
+    print(f"Total cost:         ${s['total_cost_usd']:.6f}")
+    print(f"Latency:            {s['latency_ms']:.2f} ms")
     print("=" * 60)
 
     for case in evaluation["results"]:
@@ -386,17 +429,25 @@ def main() -> None:
         selected = [c for c in cases if c["case_id"] == args.case_id]
         if not selected:
             raise SystemExit(f"Unknown case: {args.case_id}")
+    if args.judge_model:
+        from src.backends.live import LiveBackend
+
+        if not os.getenv("OPENROUTER_API_KEY"):
+            raise SystemExit(
+                "OPENROUTER_API_KEY is not set. "
+                "Set it before using an LLM judge."
+            )
+
+    judge_factory = lambda: LiveBackend(
+        price_in=JUDGE_PRICE_IN,
+        price_out=JUDGE_PRICE_OUT,
+    )
 
     def backend_factory_for_case(case_id: str) -> BackendFactory:
         return make_backend_factory(case_id, backend=args.backend, model=args.model)
 
     # The judge is deliberately a separate backend/model from the graded model.
-    judge_factory = None
-    if args.judge_model:
-        if args.backend != "live":
-            raise SystemExit("--judge-model currently requires --backend live.")
-        from src.backends.live import LiveBackend
-        judge_factory = lambda: LiveBackend()
+
 
     evaluation = run_evaluation(
         cases=selected,
