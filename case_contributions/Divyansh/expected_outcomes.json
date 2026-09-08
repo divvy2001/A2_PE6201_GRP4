@@ -1,0 +1,100 @@
+[
+  {
+    "case_id": "CLM-9061",
+    "expected_decision": "approve_in_principle",
+    "family": "ordinary_single_line_new",
+    "must_record": [
+      "line 99213 is covered",
+      "approved_total 180",
+      "refused_total 0"
+    ],
+    "approved_total": 180,
+    "refused_total": 0,
+    "note": "Added positive case for the 40-case evaluation set."
+  },
+  {
+    "case_id": "CLM-9062",
+    "expected_decision": "approve_in_principle",
+    "family": "ordinary_single_line_new",
+    "must_record": [
+      "line 80053 is covered",
+      "approved_total 90",
+      "refused_total 0"
+    ],
+    "approved_total": 90,
+    "refused_total": 0,
+    "note": "Added positive case for the 40-case evaluation set."
+  },
+  {
+    "case_id": "CLM-9063",
+    "expected_decision": "approve_in_principle",
+    "family": "non_panel_hospital_new",
+    "must_record": [
+      "H-330 is non-panel",
+      "approved_total 200",
+      "refused_total 0"
+    ],
+    "approved_total": 200,
+    "refused_total": 0,
+    "note": "Added positive case for the 40-case evaluation set."
+  },
+  {
+    "case_id": "CLM-9064",
+    "expected_decision": "approve_in_principle",
+    "family": "preauthorised_long_line_new",
+    "must_record": [
+      "line 27447 is covered",
+      "PA-5702 cited for line 27447",
+      "PA-5702 is valid on 2026-10-26",
+      "approved_total 5000",
+      "refused_total 0"
+    ],
+    "approved_total": 5000,
+    "refused_total": 0,
+    "note": "Added positive case for the 40-case evaluation set."
+  },
+  {
+    "case_id": "CLM-9065",
+    "expected_decision": "approve_in_principle",
+    "family": "ordinary_two_line_new",
+    "must_record": [
+      "a disposition for both lines",
+      "47120 covered for 1400",
+      "70553 covered for 500",
+      "approved_total 1900",
+      "refused_total 0"
+    ],
+    "approved_total": 1900,
+    "refused_total": 0,
+    "note": "Added positive case for the 40-case evaluation set."
+  },
+  {
+    "case_id": "CLM-9066",
+    "expected_decision": "approve_in_principle",
+    "family": "ordinary_two_line_new",
+    "must_record": [
+      "a disposition for both lines",
+      "99213 covered for 180",
+      "70553 covered for 620",
+      "approved_total 800",
+      "refused_total 0"
+    ],
+    "approved_total": 800,
+    "refused_total": 0,
+    "note": "Added positive case for the 40-case evaluation set."
+  },
+  {
+    "case_id": "CLM-9067",
+    "expected_decision": "approve_in_principle",
+    "family": "non_panel_hospital_new",
+    "must_record": [
+      "H-330 is non-panel",
+      "99213 is covered for 250",
+      "approved_total 250",
+      "refused_total 0"
+    ],
+    "approved_total": 250,
+    "refused_total": 0,
+    "note": "Added positive case for the 40-case evaluation set."
+  }
+]

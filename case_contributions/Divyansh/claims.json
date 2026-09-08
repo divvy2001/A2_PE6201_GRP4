@@ -1,0 +1,123 @@
+[
+  {
+    "claim_id": "CLM-9061",
+    "member_id": "M-2214",
+    "hospital_id": "H-114",
+    "date_of_service": "2026-10-26",
+    "narrative": "Routine outpatient consultation after a minor medical concern.",
+    "documents": [
+      "itemised_bill"
+    ],
+    "lines": [
+      {
+        "code": "99213",
+        "amount": 180
+      }
+    ]
+  },
+  {
+    "claim_id": "CLM-9062",
+    "member_id": "M-3390",
+    "hospital_id": "H-207",
+    "date_of_service": "2026-10-26",
+    "narrative": "Routine metabolic blood testing during an outpatient visit.",
+    "documents": [
+      "itemised_bill"
+    ],
+    "lines": [
+      {
+        "code": "80053",
+        "amount": 90
+      }
+    ]
+  },
+  {
+    "claim_id": "CLM-9063",
+    "member_id": "M-6118",
+    "hospital_id": "H-330",
+    "date_of_service": "2026-10-26",
+    "narrative": "Outpatient consultation at a specialist hospital.",
+    "documents": [
+      "itemised_bill"
+    ],
+    "lines": [
+      {
+        "code": "99213",
+        "amount": 200
+      }
+    ]
+  },
+  {
+    "claim_id": "CLM-9064",
+    "member_id": "M-5502",
+    "hospital_id": "H-207",
+    "date_of_service": "2026-10-26",
+    "narrative": "Planned knee replacement with supporting hospital documentation.",
+    "documents": [
+      "itemised_bill",
+      "discharge_summary"
+    ],
+    "lines": [
+      {
+        "code": "27447",
+        "amount": 5000
+      }
+    ]
+  },
+  {
+    "claim_id": "CLM-9065",
+    "member_id": "M-2214",
+    "hospital_id": "H-114",
+    "date_of_service": "2026-10-27",
+    "narrative": "Appendix treatment followed by diagnostic imaging during the same episode.",
+    "documents": [
+      "itemised_bill"
+    ],
+    "lines": [
+      {
+        "code": "47120",
+        "amount": 1400
+      },
+      {
+        "code": "70553",
+        "amount": 500
+      }
+    ]
+  },
+  {
+    "claim_id": "CLM-9066",
+    "member_id": "M-6118",
+    "hospital_id": "H-207",
+    "date_of_service": "2026-10-28",
+    "narrative": "Routine outpatient consultation with diagnostic imaging.",
+    "documents": [
+      "itemised_bill"
+    ],
+    "lines": [
+      {
+        "code": "99213",
+        "amount": 180
+      },
+      {
+        "code": "70553",
+        "amount": 620
+      }
+    ]
+  },
+  {
+    "claim_id": "CLM-9067",
+    "member_id": "M-3390",
+    "hospital_id": "H-330",
+    "date_of_service": "2026-10-29",
+    "narrative": "Outpatient consultation at a non-panel specialist hospital.",
+    "documents": [
+      "itemised_bill"
+    ],
+    "lines": [
+      {
+        "code": "99213",
+        "amount": 250
+      }
+    ]
+  }
+]
