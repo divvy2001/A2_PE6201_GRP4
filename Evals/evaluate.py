@@ -19,6 +19,9 @@ import os
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, Callable
+import getpass
+import os
+
 
 from src.agent.loop import run_agent
 from src.agent.prompt_loader import load_prompt
@@ -421,6 +424,12 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     args = build_parser().parse_args()
+    if args.backend == "live" or args.judge_model:
+        api_key = input("Enter OpenRouter API key: ").strip()
+        if not api_key:
+            raise SystemExit("No API key entered.")
+        os.environ["OPENROUTER_API_KEY"] = api_key
+    
     cases = load_answer_key(args.answer_key)
 
     if args.all:
