@@ -239,8 +239,20 @@ def run_case(
                     model=judge_model,
                 )
 
-        l2_passed = None if not expected.get("must_record") else bool(judgement and judgement.get("passed"))
-        passed = l1_passed if l2_passed is None else l1_passed and l2_passed
+        # L1: deterministic/code checks from Evals.checks.
+        l1_passed = bool(l1["code_passed"])
+
+        # L2: semantic judgement from Evals.judgement.
+        # Cases without must_record requirements do not need an L2 check.
+        if not expected.get("must_record"):
+            l2_passed = True
+        elif judgement is None:
+            l2_passed = False
+        else:
+            l2_passed = bool(judgement.get("passed"))
+
+        # Overall result requires BOTH L1 and L2 to pass.
+        overall_passed = l1_passed and l2_passed
 
         total_in += result.tokens_in
         total_out += result.tokens_out
@@ -255,7 +267,13 @@ def run_case(
 
         trials.append({
             "trial": trial,
-            "passed": passed,
+            "passed": overall_passed,
+
+            # Explicit L1/L2 results.
+            "l1_passed": l1_passed,
+            "l2_passed": l2_passed,
+
+            # Backward-compatible field names.
             "code_passed": l1_passed,
             "judgement_passed": l2_passed,
             "result": result.to_dict(),
@@ -269,6 +287,9 @@ def run_case(
         "family": case["family"],
         "expected": expected,
         "trials": trials,
+        # Case-level L1, L2, and overall results are kept separate.
+        "l1_passed": all(t["l1_passed"] for t in trials),
+        "l2_passed": all(t["l2_passed"] for t in trials),
         "passed": all(t["passed"] for t in trials),
         "num_trials": len(trials),
         "tokens_in": total_in,
@@ -328,6 +349,19 @@ def run_evaluation(
         "total_cases": len(results),
         "passed_cases": passed,
         "case_pass_rate": passed / len(results) if results else 0.0,
+
+        # Separate L1 and L2 case-level pass rates.
+        "l1_passed_cases": sum(r["l1_passed"] for r in results),
+        "l1_pass_rate": (
+            sum(r["l1_passed"] for r in results) / len(results)
+            if results else 0.0
+        ),
+        "l2_passed_cases": sum(r["l2_passed"] for r in results),
+        "l2_pass_rate": (
+            sum(r["l2_passed"] for r in results) / len(results)
+            if results else 0.0
+        ),
+
         "ordinary_cases": len(ordinary),
         "ordinary_passed": sum(r["passed"] for r in ordinary),
         "ordinary_pass_rate": sum(r["passed"] for r in ordinary) / len(ordinary) if ordinary else 0.0,
@@ -395,8 +429,17 @@ def print_summary(evaluation: dict[str, Any]) -> None:
     print("=" * 60)
 
     for case in evaluation["results"]:
-        status = "PASS" if case["passed"] else "FAIL"
-        print(f"{status}  {case['case_id']}  ({case['num_trials']} trial(s))")
+        overall = "PASS" if case["passed"] else "FAIL"
+        l1 = "PASS" if case["l1_passed"] else "FAIL"
+        l2 = "PASS" if case["l2_passed"] else "FAIL"
+
+        print(
+            f"{case['case_id']}   "
+            f"L1: {l1}   "
+            f"L2: {l2}   "
+            f"Overall: {overall}   "
+            f"({case['num_trials']} trial(s))"
+    )
 
 
 # =====================================================================
