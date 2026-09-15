@@ -184,6 +184,21 @@
     "refused_total": 0
   },
   {
+    "case_id": "CLM-9046",
+    "expected_decision": "approve_in_principle",
+    "family": "policy_end_date_boundary",
+    "approved_total": 120,
+    "refused_total": 0,
+    "must_record": [
+      "POL-3310 remains active through 2027-03-31",
+      "date of service 2027-03-31 is within the policy period",
+      "line 80053 is covered for 120",
+      "approved_total 120",
+      "refused_total 0"
+    ],
+    "note": "A service on the policy end date remains in period; the boundary must not be treated as expired."
+  },
+  {
     "case_id": "CLM-9051",
     "expected_decision": "approve_in_principle",
     "family": "ordinary_low_cost_single_line",

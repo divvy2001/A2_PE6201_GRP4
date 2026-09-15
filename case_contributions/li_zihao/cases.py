@@ -1,4 +1,8 @@
-"""Five Problem A evaluation cases contributed by Li Zihao."""
+"""Six Problem A evaluation cases authored by Li Zihao.
+
+Five are currently included in the shared formal evaluation set. CLM-9043 is
+retained here as contribution history after the team reduced its negative set.
+"""
 
 from __future__ import annotations
 
@@ -75,6 +79,18 @@ EXTRA_CLAIMS = [
         "documents": ["itemised_bill", "discharge_summary"],
         "lines": [
             {"code": "62480", "amount": 1000},
+        ],
+    },
+    # CLM-9046 — The policy remains active on its inclusive end date.
+    {
+        "claim_id": "CLM-9046",
+        "member_id": "M-2214",
+        "hospital_id": "H-114",
+        "date_of_service": "2027-03-31",
+        "narrative": "Routine metabolic panel on the final day of the policy period.",
+        "documents": ["itemised_bill"],
+        "lines": [
+            {"code": "80053", "amount": 120},
         ],
     },
 ]

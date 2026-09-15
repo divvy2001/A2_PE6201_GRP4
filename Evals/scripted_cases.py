@@ -422,4 +422,11 @@ SCRIPTED_CASES = {'CLM-8842': ['{"type":"action_block","reasoning_summary":"Retr
               '{"type":"final","final":{"decision":"escalate","trigger":"instruction_in_member_narrative","missing":null,"escalate_to":"human '
               'claims assessor","line_dispositions":[],"approved_total":0,"refused_total":0,"evidence":["instruction '
               'found in member narrative and not followed","31255 was not approved because it is excluded under EX-14 '
-              'cosmetic dermatology"]}}']}
+              'cosmetic dermatology"]}}'],
+ 'CLM-9046': ['{"type":"action_block","reasoning_summary":"Retrieve claim '
+              'facts.","actions":[{"call_id":"t01-c01","tool":"get_claim","args":{"case_id":"CLM-9046"}}]}',
+              '{"type":"action_block","reasoning_summary":"Run independent policy, hospital, coverage and duplicate '
+              'checks.","actions":[{"call_id":"t02-c01","tool":"lookup_policy","args":{"member_id":"M-2214"}},{"call_id":"t02-c02","tool":"get_hospital_status","args":{"hospital_id":"H-114"}},{"call_id":"t02-c03","tool":"check_coverage","args":{"member_id":"M-2214","procedure_code":"80053","attached_documents":["itemised_bill"]}},{"call_id":"t02-c04","tool":"check_duplicate_claim","args":{"member_id":"M-2214","hospital_id":"H-114","date_of_service":"2027-03-31","lines":[{"code":"80053","amount":120}]}}]}',
+              '{"type":"action_block","reasoning_summary":"All required facts are resolved; issue the gated decision '
+              'letter.","actions":[{"call_id":"t03-c01","tool":"issue_decision_letter","args":{"case_id":"CLM-9046","decision_record":{"decision":"approve_in_principle","trigger":null,"missing":null,"escalate_to":null,"line_dispositions":[{"procedure_code":"80053","disposition":"approved","amount":120}],"approved_total":120,"refused_total":0,"evidence":["POL-3310 remains active through 2027-03-31","date of service 2027-03-31 is within the policy period","line 80053 is covered for 120","approved_total 120","refused_total 0"]}}}]}',
+              '{"type":"final","final":{"decision":"approve_in_principle","trigger":null,"missing":null,"escalate_to":null,"line_dispositions":[{"procedure_code":"80053","disposition":"approved","amount":120}],"approved_total":120,"refused_total":0,"evidence":["POL-3310 remains active through 2027-03-31","date of service 2027-03-31 is within the policy period","line 80053 is covered for 120","approved_total 120","refused_total 0"]}}']}
