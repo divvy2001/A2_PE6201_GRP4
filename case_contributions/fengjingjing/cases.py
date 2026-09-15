@@ -4,7 +4,15 @@ EXTRA_PROCEDURES = []
 EXTRA_HOSPITALS = []
 EXTRA_POLICIES = []
 EXTRA_MEMBERS = []
-EXTRA_PREAUTHORISATIONS = []
+EXTRA_PREAUTHORISATIONS = [
+    {
+        "preauth_id": "PA-9033",
+        "member_id": "M-6118",
+        "procedure_code": "62480",
+        "valid_from": "2026-10-01",
+        "valid_to": "2026-10-31",
+    },
+]
 
 EXTRA_CLAIMS = [
     {
@@ -62,8 +70,8 @@ EXTRA_CLAIMS = [
         "claim_id": "CLM-9035",
         "member_id": "M-5502",
         "hospital_id": "H-207",
-        "date_of_service": "2026-05-25",
-        "narrative": "Routine outpatient consultation before the policy effective date.",
+        "date_of_service": "2026-06-25",
+        "narrative": "Routine outpatient consultation during the active policy period.",
         "documents": ["itemised_bill"],
         "lines": [
             {"code": "99213", "amount": 180},
