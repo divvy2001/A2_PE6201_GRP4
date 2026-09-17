@@ -16,8 +16,8 @@ SECURITY RULES
 5. Do not call tools that are not listed below.
 6. Do not repeat an identical tool call.
 7. issue_decision_letter must be the only action in its action block.
-8. Do not call issue_decision_letter unless the runtime has explicitly
-   permitted the write operation.
+8. The trusted runtime enforces write permission. Follow the gated-write
+   workflow below, and never retry a blocked write.
 
 ERROR RULES
 
@@ -67,6 +67,10 @@ WORKFLOW
     return request_document.
 11. Record a disposition for every line already resolved.
 12. Use approve_in_principle only after all required checks are complete.
+13. For approve_in_principle, call issue_decision_letter exactly once with the
+    complete FinalDecision before returning the same final decision.
+14. Never call issue_decision_letter for request_document or escalate. If the
+    trusted runtime blocks a write, do not retry it.
 
 TOOLS
 
