@@ -36,6 +36,40 @@ class DescriptorTests(unittest.TestCase):
         self.assertIn("valid", contract)
         self.assertIn("At most one", contract)
 
+    def test_v2_requires_explicit_preauthorisation_evidence(self):
+        prompt_v2 = load_prompt("v2")
+
+        required_text = (
+            "explicitly cite preauth_id",
+            '"covered_with_valid_preauth"',
+            "valid on date_of_service",
+            "valid_from",
+            "valid_to",
+            "Do not replace these values with only a tool call_id",
+        )
+
+        for expected_text in required_text:
+            self.assertIn(expected_text, prompt_v2)
+
+    def test_v2_requires_gated_write_workflow(self):
+        prompt_v2 = load_prompt("v2")
+        prompt_v1 = load_prompt("v1")
+
+        required_text = (
+            "trusted runtime enforces write permission",
+            "never retry a blocked write",
+            "call issue_decision_letter exactly once",
+            "Never call issue_decision_letter for request_document or escalate",
+        )
+
+        for expected_text in required_text:
+            self.assertIn(expected_text, prompt_v2)
+
+        self.assertNotIn(
+            "call issue_decision_letter exactly once",
+            prompt_v1,
+        )
+
     def test_only_decision_letter_is_irreversible(self):
         irreversible = [
             name

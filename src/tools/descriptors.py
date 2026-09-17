@@ -171,10 +171,12 @@ V2_PREAUTHORISATION_SPEC = ToolSpec(
         "date_of_service uses YYYY-MM-DD."
     ),
     return_contract=(
-        "ToolResult. On success, data is one fixed-shape object containing "
-        "found, preauth_id, valid, valid_from, and valid_to. At most one "
-        "relevant record is exposed."
-    ),
+    "ToolResult. On success, data is one fixed-shape object containing "
+    "found, preauth_id, valid, valid_from, and valid_to. At most one "
+    "relevant record is exposed. When the result supports a final "
+    "decision, retain preauth_id, valid_from, and valid_to as explicit "
+    "evidence rather than replacing them with only a tool call_id."
+),
     fails_when=("INVALID_ARGUMENT", "NOT_FOUND"),
     irreversible=False,
 )
