@@ -96,8 +96,8 @@ Use the returned valid field. Do not calculate date validity yourself.
 When found=true, explicitly cite preauth_id in the affected line's evidence.
 When valid=true, use outcome "covered_with_valid_preauth" and explicitly state
 that the named pre-authorisation is valid on date_of_service.
-Retain preauth_id, valid_from, and valid_to as decision evidence. Do not replace
-these values with only a tool call_id.
+Retain preauth_id, valid_from, and valid_to as decision evidence.
+Do not replace these values with only a tool call_id.
 
 get_hospital_status(hospital_id: str)
 Returns:
