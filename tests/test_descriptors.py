@@ -51,6 +51,25 @@ class DescriptorTests(unittest.TestCase):
         for expected_text in required_text:
             self.assertIn(expected_text, prompt_v2)
 
+    def test_v2_requires_gated_write_workflow(self):
+        prompt_v2 = load_prompt("v2")
+        prompt_v1 = load_prompt("v1")
+
+        required_text = (
+            "trusted runtime enforces write permission",
+            "never retry a blocked write",
+            "call issue_decision_letter exactly once",
+            "Never call issue_decision_letter for request_document or escalate",
+        )
+
+        for expected_text in required_text:
+            self.assertIn(expected_text, prompt_v2)
+
+        self.assertNotIn(
+            "call issue_decision_letter exactly once",
+            prompt_v1,
+        )
+
     def test_only_decision_letter_is_irreversible(self):
         irreversible = [
             name
