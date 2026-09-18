@@ -1,0 +1,5 @@
+cap,value,unit,basis
+step_cap,8.0,model turns/run,team spec + selected Luna max observed turn count
+per_run_budget_ceiling,0.05,USD/run,team spec
+monthly_per_user_limit,200.0,agent runs/user/month,deployment assumption
+implied_monthly_user_budget_ceiling,10.0,USD/user/month,200 runs × US$0.05/run

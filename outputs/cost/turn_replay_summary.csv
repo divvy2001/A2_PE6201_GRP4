@@ -1,0 +1,3 @@
+replay_mode,cases,avg_turns,median_turns,max_turns,avg_proxy_tokens_in,avg_proxy_tokens_out,avg_proxy_layer1_usd,code_pass_rate,step_cap_hits
+parallel,41,4.097560975609756,4.0,5,7744.365853658536,412.1463414634146,0.002043448780487805,1.0,0
+strict_sequential,41,6.341463414634147,6.0,8,12240.707317073171,429.0731707317073,0.002963029268292683,0.8780487804878049,5

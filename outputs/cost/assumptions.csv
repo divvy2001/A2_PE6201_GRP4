@@ -1,0 +1,6 @@
+assumption,value,unit,source_or_status
+monthly_volume,8000.0,claims/month,Problem A
+assessor_rate,38.0,USD/hour,Problem A
+minutes_per_escalation,12.0,minutes,Problem A
+failure_cost,7.6,USD/failure,derived
+layer3_fixed_monthly,0.0,USD/month,explicit prototype-scope team assumption

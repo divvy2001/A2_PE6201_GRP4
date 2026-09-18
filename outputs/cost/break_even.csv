@@ -1,0 +1,2 @@
+cheap_model,cheap_variable_cost_usd,expensive_model,expensive_variable_cost_usd,expensive_success_rate,expensive_cost_to_serve_usd,failure_cost_usd,break_even_success_rate,cheap_measured_success_rate,measured_minus_break_even_pp
+google/gemini-2.5-flash-lite,0.0018380677966101698,openai/gpt-5.6-luna,0.0034805016949152547,0.5932203389830508,3.0950059254237288,7.6,0.5930042292595896,0.288135593220339,-30.486863603925062
