@@ -1,0 +1,5 @@
+lever,status,before,after,unit,measured_effect,evidence_type
+tool_block_size,READY_WITH_RECONSTRUCTION_NOTE,1049.0,841.0,cl100k_base proxy tokens,-208 tokens (19.8% reduction),analytical D2(a) baseline → actual final block
+turn_count,READY_WITH_SCOPE_NOTE,6.341463414634147,4.097560975609756,average turns/case,proxy input tokens 12240.7 → 7744.4; code pass rate 87.8% → 100.0%; strict-sequential step-cap hits 5,controlled scripted D2(c) replay
+observation_size,READY_WITH_COMMIT_NOTE,442.03389830508473,475.7457627118644,avg cl100k_base observation tokens/trial,total tokens 26080 → 28069,retained Gemini live v1/v2 traces
+success_rate,READY_WITH_COMMIT_NOTE,0.1694915254237288,0.288135593220339,trial pass rate,+11.86 percentage points,retained Gemini live v1/v2 results
