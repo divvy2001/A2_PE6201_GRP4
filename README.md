@@ -126,10 +126,6 @@ A2_PE6201_GRP4/
 └── README.md
 ```
 
-The `.venv/`, `__pycache__/`, and other generated/package files are omitted from the overview above.
-
----
-
 ## Evaluation – Main Entry Point
 
 The **`Evals/` directory is the main entry point for running the evaluation**.
